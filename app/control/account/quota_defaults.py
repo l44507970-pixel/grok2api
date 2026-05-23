@@ -3,12 +3,12 @@
 Canonical quota totals per pool type (from upstream rate-limits API):
 
               auto    fast    expert    heavy    grok_4_3
-  basic          —      30       —        —         —        window: 86400 s
-  super         50     140      50        —        50        window: 7200 s
-  heavy        150     400     150       20       150        window: 7200 s
+  basic         20      30      20        20        20       window: 86400 s
+  super         50     140      50        —         50       window: 7200 s
+  heavy        150     400     150        20        150      window: 7200 s
 
-Pool inference uses ``auto.total`` as the primary signal for super/heavy
-accounts; basic accounts no longer expose auto/expert windows locally.
+Pool inference uses ``auto.total`` as the primary signal — value 20 maps to
+basic, 50 to super, 150 to heavy.
 """
 
 from typing import TYPE_CHECKING
@@ -42,11 +42,15 @@ def _w(remaining: int, total: int, window_seconds: int) -> QuotaWindow:
 
 BASIC_FAST_LIMIT = 30
 BASIC_FAST_WINDOW_SECONDS = 86_400
+BASIC_OTHER_LIMIT = 20
+BASIC_OTHER_WINDOW_SECONDS = 86_400
 
 BASIC_QUOTA_DEFAULTS = AccountQuotaSet(
-    auto=_w(0, 0, 0),  # unsupported on basic accounts
+    auto=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
     fast=_w(BASIC_FAST_LIMIT, BASIC_FAST_LIMIT, BASIC_FAST_WINDOW_SECONDS),
-    expert=_w(0, 0, 0),  # unsupported on basic accounts
+    expert=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
+    heavy=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
+    grok_4_3=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
 )
 
 SUPER_QUOTA_DEFAULTS = AccountQuotaSet(
@@ -72,7 +76,7 @@ _POOL_DEFAULTS: dict[str, AccountQuotaSet] = {
 }
 
 _SUPPORTED_MODE_IDS_BY_POOL: dict[str, frozenset[int]] = {
-    "basic": frozenset((1,)),
+    "basic": frozenset((0, 1, 2, 3, 4)),
     "super": frozenset((0, 1, 2, 4)),
     "heavy": frozenset((0, 1, 2, 3, 4)),
 }

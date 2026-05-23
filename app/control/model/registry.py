@@ -36,6 +36,16 @@ MODELS: tuple[ModelSpec, ...] = (
     # Super+（basic 池不支持此模式）
     ModelSpec("grok-4.3-beta",                          ModeId.GROK_4_3, Tier.SUPER, Capability.CHAT,       True, "Grok 4.3 Beta"),
 
+    # === webchat2api-aligned aliases (free-tier visible) ===================
+    # 别名走 prefer_best=True：有 heavy/super 池时优先用，没有时降到 basic。
+    # 落到 basic 时要求 _SUPPORTED_MODE_IDS_BY_POOL["basic"] 包含对应 mode。
+    ModelSpec("grok-4",                                 ModeId.AUTO,     Tier.BASIC, Capability.CHAT,       True, "Grok 4",                  prefer_best=True),
+    ModelSpec("grok-4.3",                               ModeId.GROK_4_3, Tier.BASIC, Capability.CHAT,       True, "Grok 4.3",                prefer_best=True),
+    ModelSpec("grok-4.20",                              ModeId.AUTO,     Tier.BASIC, Capability.CHAT,       True, "Grok 4.20",               prefer_best=True),
+    ModelSpec("grok-4.20-non-reasoning",                ModeId.FAST,     Tier.BASIC, Capability.CHAT,       True, "Grok 4.20 Non-Reasoning", prefer_best=True),
+    ModelSpec("grok-4.20-reasoning",                    ModeId.EXPERT,   Tier.BASIC, Capability.CHAT,       True, "Grok 4.20 Reasoning",     prefer_best=True),
+    ModelSpec("grok-4.20-multi-agent",                  ModeId.HEAVY,    Tier.BASIC, Capability.CHAT,       True, "Grok 4.20 Multi-Agent",   prefer_best=True),
+
     # === Image ==============================================================
 
     # Basic fast

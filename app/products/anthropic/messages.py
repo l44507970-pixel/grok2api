@@ -30,7 +30,7 @@ from app.dataplane.reverse.protocol.tool_parser import parse_tool_calls
 
 from app.products.openai.chat import (
     _stream_chat, _extract_message, _resolve_image,
-    _quota_sync, _fail_sync, _parse_retry_codes, _feedback_kind, _log_task_exception,
+    _quota_sync, _fail_sync, _feedback_kind, _log_task_exception,
     _configured_retry_codes, _should_retry_upstream,
 )
 from app.products._account_selection import reserve_account, selection_max_retries
@@ -286,10 +286,26 @@ async def create(
 
     cfg     = get_config()
     spec    = resolve_model(model)
-    mode_id = int(spec.mode_id)
 
     # Build internal message list
     internal_messages = _parse_anthropic_messages(messages, system)
+
+    msg_id = _make_msg_id()
+    if spec.is_console_chat():
+        from .console_messages import create as console_messages_create
+
+        return await console_messages_create(
+            model=model,
+            messages=internal_messages,
+            stream=stream,
+            emit_think=emit_think,
+            temperature=temperature,
+            top_p=top_p,
+            msg_id=msg_id,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+
     internal_message, files = _extract_message(internal_messages)
     if not internal_message.strip():
         raise UpstreamError("Empty message after extraction", status=400)
@@ -313,7 +329,6 @@ async def create(
     max_retries = selection_max_retries()
     retry_codes = _configured_retry_codes(cfg)
     timeout_s   = cfg.get_float("chat.timeout", 120.0)
-    msg_id      = _make_msg_id()
 
     # -------------------------------------------------------------------------
     # Streaming

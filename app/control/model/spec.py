@@ -47,6 +47,10 @@ class ModelSpec:
     def is_voice(self) -> bool:
         return bool(self.capability & Capability.VOICE)
 
+    def is_console_chat(self) -> bool:
+        """Return whether this model is routed through console.x.ai."""
+        return bool(self.capability & Capability.CONSOLE_CHAT)
+
     def pool_name(self) -> str:
         """Return the canonical pool string for this tier."""
         if self.tier == Tier.SUPER:

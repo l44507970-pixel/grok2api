@@ -65,6 +65,7 @@ class LocalAccountRepository:
                     quota_expert       TEXT    NOT NULL DEFAULT '{{}}',
                     quota_heavy        TEXT    NOT NULL DEFAULT '{{}}',
                     quota_grok_4_3     TEXT    NOT NULL DEFAULT '{{}}',
+                    quota_console      TEXT    NOT NULL DEFAULT '{{}}',
                     usage_use_count    INTEGER NOT NULL DEFAULT 0,
                     usage_fail_count   INTEGER NOT NULL DEFAULT 0,
                     usage_sync_count   INTEGER NOT NULL DEFAULT 0,
@@ -86,6 +87,7 @@ class LocalAccountRepository:
                     ON {_TBL} (deleted_at) WHERE deleted_at IS NOT NULL;
             """)
             self._ensure_column_sync(conn, "quota_grok_4_3", "TEXT NOT NULL DEFAULT '{}'")
+            self._ensure_column_sync(conn, "quota_console", "TEXT NOT NULL DEFAULT '{}'")
             conn.commit()
 
     @staticmethod
@@ -115,14 +117,17 @@ class LocalAccountRepository:
         d["tags"]  = json.loads(d.get("tags")  or "[]")
         heavy_raw     = d.pop("quota_heavy",     "{}") or "{}"
         grok_4_3_raw  = d.pop("quota_grok_4_3",  "{}") or "{}"
+        console_raw   = d.pop("quota_console",   "{}") or "{}"
         heavy_dict    = json.loads(heavy_raw)
         grok_4_3_dict = json.loads(grok_4_3_raw)
+        console_dict  = json.loads(console_raw)
         d["quota"] = {
             "auto":   json.loads(d.pop("quota_auto",   "{}") or "{}"),
             "fast":   json.loads(d.pop("quota_fast",   "{}") or "{}"),
             "expert": json.loads(d.pop("quota_expert", "{}") or "{}"),
             **({"heavy":    heavy_dict}    if heavy_dict    else {}),
             **({"grok_4_3": grok_4_3_dict} if grok_4_3_dict else {}),
+            **({"console":  console_dict}  if console_dict  else {}),
         }
         d["ext"] = json.loads(d.get("ext") or "{}")
         return AccountRecord.model_validate(d)
@@ -142,6 +147,7 @@ class LocalAccountRepository:
             "quota_expert":     json.dumps(qs.expert.to_dict()),
             "quota_heavy":      json.dumps(qs.heavy.to_dict())    if qs.heavy    else "{}",
             "quota_grok_4_3":   json.dumps(qs.grok_4_3.to_dict()) if qs.grok_4_3 else "{}",
+            "quota_console":    json.dumps(qs.console.to_dict())   if qs.console  else "{}",
             "usage_use_count":  record.usage_use_count,
             "usage_fail_count": record.usage_fail_count,
             "usage_sync_count": record.usage_sync_count,
@@ -175,12 +181,12 @@ class LocalAccountRepository:
                 f"""
                 INSERT INTO {_TBL} (
                     token, pool, status, created_at, updated_at,
-                    tags, quota_auto, quota_fast, quota_expert, quota_heavy, quota_grok_4_3,
+                    tags, quota_auto, quota_fast, quota_expert, quota_heavy, quota_grok_4_3, quota_console,
                     usage_use_count, usage_fail_count, usage_sync_count,
                     ext, revision
                 ) VALUES (
                     :token, :pool, 'active', :ts, :ts,
-                    :tags, :qa, :qf, :qe, :qh, :qg,
+                    :tags, :qa, :qf, :qe, :qh, :qg, :qc,
                     0, 0, 0, :ext, :rev
                 )
                 ON CONFLICT(token) DO UPDATE SET
@@ -202,6 +208,7 @@ class LocalAccountRepository:
                     "qe":    json.dumps(qs.expert.to_dict()),
                     "qh":    json.dumps(qs.heavy.to_dict())    if qs.heavy    else "{}",
                     "qg":    json.dumps(qs.grok_4_3.to_dict()) if qs.grok_4_3 else "{}",
+                    "qc":    json.dumps(qs.console.to_dict())  if qs.console  else "{}",
                     "ext":   json.dumps(item.ext),
                     "rev":   revision,
                 },
@@ -225,7 +232,6 @@ class LocalAccountRepository:
             if row is None:
                 continue
             record = self._row_to_record(row)
-            qs = record.quota_set()
 
             sets: dict[str, Any] = {"updated_at": ts, "revision": revision}
 
@@ -265,6 +271,8 @@ class LocalAccountRepository:
                 sets["quota_heavy"] = json.dumps(patch.quota_heavy)
             if patch.quota_grok_4_3 is not None:
                 sets["quota_grok_4_3"] = json.dumps(patch.quota_grok_4_3)
+            if patch.quota_console is not None:
+                sets["quota_console"] = json.dumps(patch.quota_console)
 
             # Tags — use set arithmetic to avoid O(n×m) membership tests.
             tag_set: set[str] = set(record.tags)

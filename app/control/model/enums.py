@@ -14,6 +14,7 @@ class ModeId(IntEnum):
     EXPERT = 2  # modeId="expert"
     HEAVY = 3  # modeId="heavy"    — only available on heavy-pool accounts
     GROK_4_3 = 4  # modeId="grok-420-computer-use-sa" — super/heavy only
+    CONSOLE = 5  # console.x.ai independent quota window
 
     def to_api_str(self) -> str:
         _OVERRIDES: dict[int, str] = {
@@ -39,6 +40,7 @@ class Capability(IntFlag):
     VIDEO = 8
     VOICE = 16
     ASSET = 32
+    CONSOLE_CHAT = 64
 
 
 # Human-readable mode strings in API order.

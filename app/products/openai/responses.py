@@ -7,8 +7,6 @@ Streaming emits standard Responses API SSE events.
 import asyncio
 from typing import Any, AsyncGenerator
 
-import orjson
-
 from app.platform.logging.logger import logger
 from app.platform.config.snapshot import get_config
 from app.platform.errors import RateLimitError, UpstreamError
@@ -20,13 +18,13 @@ from app.control.account.enums import FeedbackKind
 from app.dataplane.reverse.protocol.xai_chat import classify_line, StreamAdapter
 from app.products._account_selection import reserve_account, selection_max_retries
 
-from .chat import _stream_chat, _extract_message, _resolve_image, _quota_sync, _fail_sync, _parse_retry_codes, _feedback_kind, _log_task_exception, _upstream_body_excerpt
+from .chat import _stream_chat, _extract_message, _resolve_image, _quota_sync, _fail_sync, _feedback_kind, _log_task_exception, _upstream_body_excerpt
 from .chat import _configured_retry_codes, _should_retry_upstream
 from ._format import (
     make_resp_id, build_resp_usage, make_resp_object, format_sse,
 )
 from app.dataplane.reverse.protocol.tool_prompt import (
-    build_tool_system_prompt, extract_tool_names, inject_into_message, tool_calls_to_xml,
+    build_tool_system_prompt, extract_tool_names, inject_into_message,
 )
 from app.dataplane.reverse.protocol.tool_parser import parse_tool_calls
 from ._tool_sieve import ToolSieve
@@ -217,16 +215,38 @@ async def create(
     top_p:        float,
     tools:        list[dict] | None = None,
     tool_choice:  Any = None,
+    reasoning_effort: str | None = None,
 ) -> dict | AsyncGenerator[str, None]:
 
     cfg     = get_config()
     spec    = resolve_model(model)
-    mode_id = int(spec.mode_id)   # cast once, reuse everywhere
 
     messages: list[dict] = []
     if instructions:
         messages.append({"role": "system", "content": instructions})
     messages.extend(_parse_input(input_val))
+
+    response_id  = make_resp_id("resp")
+    reasoning_id = make_resp_id("rs")
+    message_id   = make_resp_id("msg")
+
+    if spec.is_console_chat():
+        from .console_responses import create as console_responses_create
+
+        return await console_responses_create(
+            model=model,
+            messages=messages,
+            stream=stream,
+            emit_think=emit_think,
+            temperature=temperature,
+            top_p=top_p,
+            response_id=response_id,
+            reasoning_id=reasoning_id,
+            message_id=message_id,
+            reasoning_effort=reasoning_effort,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
 
     message, files = _extract_message(messages)
     if not message.strip():
@@ -249,9 +269,6 @@ async def create(
 
     max_retries  = selection_max_retries()
     retry_codes  = _configured_retry_codes(cfg)
-    response_id  = make_resp_id("resp")
-    reasoning_id = make_resp_id("rs")
-    message_id   = make_resp_id("msg")
     timeout_s    = cfg.get_float("chat.timeout", 120.0)
 
     # -------------------------------------------------------------------------

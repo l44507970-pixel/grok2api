@@ -2,10 +2,10 @@
 
 Canonical quota totals per pool type (from upstream rate-limits API):
 
-              auto    fast    expert    heavy    grok_4_3
-  basic         20      30      20        20        20       window: 86400 s
-  super         50     140      50        —         50       window: 7200 s
-  heavy        150     400     150        20        150      window: 7200 s
+              auto    fast    expert    heavy    grok_4_3    console
+  basic         20      30      20        20        20          30       window: 86400 s / console: 900 s
+  super         50     140      50        —         50          30       window: 7200 s / console: 900 s
+  heavy        150     400     150        20        150         30       window: 7200 s / console: 900 s
 
 Pool inference uses ``auto.total`` as the primary signal — value 20 maps to
 basic, 50 to super, 150 to heavy.
@@ -44,6 +44,8 @@ BASIC_FAST_LIMIT = 30
 BASIC_FAST_WINDOW_SECONDS = 86_400
 BASIC_OTHER_LIMIT = 20
 BASIC_OTHER_WINDOW_SECONDS = 86_400
+CONSOLE_LIMIT = 30
+CONSOLE_WINDOW_SECONDS = 900
 
 BASIC_QUOTA_DEFAULTS = AccountQuotaSet(
     auto=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
@@ -51,6 +53,7 @@ BASIC_QUOTA_DEFAULTS = AccountQuotaSet(
     expert=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
     heavy=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
     grok_4_3=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
+    console=_w(CONSOLE_LIMIT, CONSOLE_LIMIT, CONSOLE_WINDOW_SECONDS),
 )
 
 SUPER_QUOTA_DEFAULTS = AccountQuotaSet(
@@ -58,6 +61,7 @@ SUPER_QUOTA_DEFAULTS = AccountQuotaSet(
     fast=_w(140, 140, 7_200),  # 140 queries / 2 h
     expert=_w(50, 50, 7_200),  # 50  queries / 2 h
     grok_4_3=_w(50, 50, 7_200),  # 50  queries / 2 h
+    console=_w(CONSOLE_LIMIT, CONSOLE_LIMIT, CONSOLE_WINDOW_SECONDS),
 )
 
 HEAVY_QUOTA_DEFAULTS = AccountQuotaSet(
@@ -66,6 +70,7 @@ HEAVY_QUOTA_DEFAULTS = AccountQuotaSet(
     expert=_w(150, 150, 7_200),  # 150 queries / 2 h
     heavy=_w(20, 20, 7_200),  # 20  queries / 2 h
     grok_4_3=_w(150, 150, 7_200),  # 150 queries / 2 h
+    console=_w(CONSOLE_LIMIT, CONSOLE_LIMIT, CONSOLE_WINDOW_SECONDS),
 )
 
 # Map pool name → defaults object (used by backends on upsert).
@@ -76,9 +81,9 @@ _POOL_DEFAULTS: dict[str, AccountQuotaSet] = {
 }
 
 _SUPPORTED_MODE_IDS_BY_POOL: dict[str, frozenset[int]] = {
-    "basic": frozenset((0, 1, 2, 3, 4)),
-    "super": frozenset((0, 1, 2, 4)),
-    "heavy": frozenset((0, 1, 2, 3, 4)),
+    "basic": frozenset((0, 1, 2, 3, 4, 5)),
+    "super": frozenset((0, 1, 2, 4, 5)),
+    "heavy": frozenset((0, 1, 2, 3, 4, 5)),
 }
 
 # ---------------------------------------------------------------------------
@@ -106,6 +111,10 @@ def default_quota_set(pool: str) -> AccountQuotaSet:
         qs.grok_4_3 = _w(
             src.grok_4_3.remaining, src.grok_4_3.total, src.grok_4_3.window_seconds
         )
+    if src.console is not None:
+        qs.console = _w(
+            src.console.remaining, src.console.total, src.console.window_seconds
+        )
     return qs
 
 
@@ -121,6 +130,8 @@ def supported_mode_ids(pool: str) -> tuple[int, ...]:
     supported = _SUPPORTED_MODE_IDS_BY_POOL.get(
         pool, _SUPPORTED_MODE_IDS_BY_POOL["basic"]
     )
+    # mode_id=5 is a local console.x.ai quota and must not be actively probed
+    # through grok.com/rest/rate-limits.
     return tuple(mode_id for mode_id in (0, 1, 2, 3, 4) if mode_id in supported)
 
 
@@ -160,6 +171,7 @@ def normalize_quota_set(pool: str, quota_set: AccountQuotaSet) -> AccountQuotaSe
     qs = AccountQuotaSet(auto=auto, fast=fast, expert=expert)
     qs.heavy = normalize_quota_window(pool, 3, quota_set.heavy)
     qs.grok_4_3 = normalize_quota_window(pool, 4, quota_set.grok_4_3)
+    qs.console = normalize_quota_window(pool, 5, quota_set.console) or defaults.console
     return qs
 
 

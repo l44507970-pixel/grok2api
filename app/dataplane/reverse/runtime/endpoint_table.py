@@ -8,8 +8,9 @@ NOTE: gRPC-Web endpoints (accept_tos, nsfw_mgmt) live on different
 hosts (accounts.x.ai, grok.com with gRPC path), listed separately.
 """
 
-BASE       = "https://grok.com"
-ASSETS_CDN = "https://assets.grok.com"
+BASE         = "https://grok.com"
+ASSETS_CDN   = "https://assets.grok.com"
+CONSOLE_BASE = "https://console.x.ai"
 
 # ── App-chat (SSE streaming, new conversation) ──────────────────────────
 CHAT              = f"{BASE}/rest/app-chat/conversations/new"
@@ -42,13 +43,18 @@ WS_LIVEKIT        = "wss://livekit.grok.com"
 # ── LiveKit ─────────────────────────────────────────────────────────────
 LIVEKIT_TOKENS    = f"{BASE}/rest/livekit/tokens"              # POST
 
+# ── Console API (console.x.ai) ───────────────────────────────────────────
+CONSOLE_RESPONSES = f"{CONSOLE_BASE}/v1/responses"             # POST
+CONSOLE_CHAT      = f"{CONSOLE_BASE}/v1/chat/completions"      # POST
+
 
 __all__ = [
-    "BASE", "ASSETS_CDN",
+    "BASE", "ASSETS_CDN", "CONSOLE_BASE",
     "CHAT",
     "ASSETS_UPLOAD", "ASSETS_LIST", "ASSETS_DELETE", "ASSETS_DOWNLOAD",
     "RATE_LIMITS",
     "ACCEPT_TOS", "NSFW_MGMT", "SET_BIRTH",
     "MEDIA_POST", "MEDIA_POST_LINK", "VIDEO_UPSCALE",
     "WS_IMAGINE", "WS_LIVEKIT", "LIVEKIT_TOKENS",
+    "CONSOLE_RESPONSES", "CONSOLE_CHAT",
 ]

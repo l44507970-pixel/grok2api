@@ -56,12 +56,16 @@ def reconcile_refresh_runtime(
     from app.dataplane.account.selector import current_strategy, set_strategy
     from app.platform.config.snapshot import config
     from app.platform.logging.logger import logger
+    from app.platform.runtime.environment import is_serverless_runtime
 
     refresh_enabled = (
         config.get_bool("account.refresh.enabled", False)
         if enabled is None
         else bool(enabled)
     )
+    if is_serverless_runtime():
+        refresh_enabled = False
+
     target_strategy: Literal["quota", "random"] = (
         "quota" if refresh_enabled else "random"
     )

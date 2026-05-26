@@ -18,21 +18,21 @@ router = APIRouter()
 
 
 async def _acquire_token():
-    from app.dataplane.account import _directory as _acct_dir
-    if _acct_dir is None:
-        return None, None
+    from app.control.account.lifecycle import get_runtime_directory
+
+    _acct_dir = await get_runtime_directory()
     from app.control.model.registry import get as get_model
     spec = get_model("grok-imagine-image")
     if spec is None:
-        return None, None
+        return None, None, _acct_dir
     acct = await _acct_dir.reserve(
         pool_candidates=spec.pool_candidates(),
         mode_id=int(spec.mode_id),
         now_s_override=now_s(),
     )
     if acct is None:
-        return None, None
-    return acct.token, acct
+        return None, None, _acct_dir
+    return acct.token, acct, _acct_dir
 
 
 def _extract_token(value: str | None) -> str:
@@ -95,9 +95,9 @@ async def imagine_ws(websocket: WebSocket):
         count: int,
         quality: str,
     ):
-        from app.dataplane.account import _directory as _acct_dir
         from app.dataplane.reverse.transport.imagine_ws import stream_images
 
+        _acct_dir = None
         run_id = uuid.uuid4().hex
         enable_pro = quality == "quality"
         await _send({
@@ -112,7 +112,7 @@ async def imagine_ws(websocket: WebSocket):
 
         acct = None
         try:
-            token, acct = await _acquire_token()
+            token, acct, _acct_dir = await _acquire_token()
             if not token:
                 await _send({
                     "type": "error",

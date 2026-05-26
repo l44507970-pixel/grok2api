@@ -339,12 +339,18 @@ async def get_account_directory(
     global _directory
     if _directory is None:
         if repository is None:
-            raise RuntimeError(
-                "AccountDirectory not bootstrapped — repository required on first call"
-            )
+            from app.control.account.lifecycle import get_runtime_repository
+
+            repository = await get_runtime_repository()
         _directory = AccountDirectory(repository)
         await _directory.bootstrap()
     return _directory
 
 
-__all__ = ["AccountDirectory", "get_account_directory"]
+def reset_account_directory() -> None:
+    """Clear the process-local account directory cache."""
+    global _directory
+    _directory = None
+
+
+__all__ = ["AccountDirectory", "get_account_directory", "reset_account_directory"]

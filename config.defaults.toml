@@ -62,6 +62,18 @@ imagine_public_image_proxy = false
 video_format = "grok_url"
 
 
+# ==================== 模型列表 ====================
+[models]
+# 强制只公开 console.x.ai 聊天模型；适合只部署 console cookie 的环境
+console_only = false
+# Vercel / serverless 下默认只公开 console.x.ai 聊天模型
+serverless_console_only = true
+# Vercel / serverless 下默认隐藏实验性或不稳定的 console 别名
+serverless_stable_console_only = true
+# 留空使用内置稳定列表；可用逗号分隔字符串或 TOML 数组覆盖
+serverless_console_allowlist = []
+
+
 # ==================== 本地缓存 ====================
 [cache.local]
 # 图片缓存上限（MB），0 = 不限制；超限后按最旧文件优先清理，并回落到上限的 60%

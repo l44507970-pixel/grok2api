@@ -262,10 +262,9 @@ async def create(
         message = inject_into_message(message, tool_prompt)
         logger.info("responses tool injection: tool_names={} choice={}", tool_names, tool_choice)
 
-    from app.dataplane.account import _directory as _acct_dir
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
-    directory = _acct_dir
+    from app.control.account.lifecycle import get_runtime_directory
+
+    directory = await get_runtime_directory()
 
     max_retries  = selection_max_retries()
     retry_codes  = _configured_retry_codes(cfg)

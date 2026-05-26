@@ -295,9 +295,9 @@ async def generate(
     aspect_ratio = resolve_aspect_ratio(size)
     enable_nsfw  = cfg.get_bool("features.enable_nsfw", True)
 
-    from app.dataplane.account import _directory as _acct_dir
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
+    from app.control.account.lifecycle import get_runtime_directory
+
+    _acct_dir = await get_runtime_directory()
 
     # Lite model: chat-based generation (no WS, ignores aspect_ratio).
     if model in _LITE_IMAGE_MODELS:
@@ -978,10 +978,9 @@ async def _run_lite_request(
     response_format: str,
     progress_cb: Callable[[int], Awaitable[None]] | None = None,
 ) -> _ImageOutput:
-    from app.dataplane.account import _directory as _acct_dir
+    from app.control.account.lifecycle import get_runtime_directory
 
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
+    _acct_dir = await get_runtime_directory()
 
     max_retries = selection_max_retries()
     retry_codes = _configured_retry_codes(get_config())
@@ -1122,9 +1121,9 @@ async def edit(
 
     prompt, image_inputs = _extract_edit_prompt_and_inputs(messages)
 
-    from app.dataplane.account import _directory as _acct_dir
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
+    from app.control.account.lifecycle import get_runtime_directory
+
+    _acct_dir = await get_runtime_directory()
 
     acct = await _acct_dir.reserve(
         pool_candidates = spec.pool_candidates(),

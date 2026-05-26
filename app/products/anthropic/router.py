@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.platform.auth.middleware import verify_api_key
 from app.platform.errors import AppError, ValidationError
 from app.control.model import registry as model_registry
+from app.control.model import visibility as model_visibility
 
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(verify_api_key)])
@@ -81,7 +82,7 @@ async def messages_endpoint(req: MessagesRequest):
 
     # Model validation
     spec = model_registry.get(req.model)
-    if spec is None or not spec.enabled:
+    if spec is None or not model_visibility.is_public(spec):
         raise ValidationError(
             f"Model {req.model!r} does not exist or you do not have access to it.",
             param="model", code="model_not_found",

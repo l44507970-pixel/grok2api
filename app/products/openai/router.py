@@ -15,6 +15,7 @@ from app.platform.errors import AppError, ValidationError
 from app.platform.logging.logger import logger
 from app.platform.storage import image_files_dir, video_files_dir
 from app.control.model import registry as model_registry
+from app.control.model import visibility as model_visibility
 from app.control.model.spec import ModelSpec
 from app.control.account.quota_defaults import supports_mode
 from .schemas import (
@@ -37,9 +38,9 @@ _TAG_FILES = "OpenAI - Files"
 
 
 async def _available_pools(request: Request) -> frozenset[str]:
-    repo = getattr(request.app.state, "repository", None)
-    if repo is None:
-        return frozenset()
+    from app.control.account.lifecycle import get_runtime_repository
+
+    repo = await get_runtime_repository(request.app)
 
     snapshot = await repo.runtime_snapshot()
     pools = {record.pool for record in snapshot.items if is_manageable(record)}
@@ -47,7 +48,7 @@ async def _available_pools(request: Request) -> frozenset[str]:
 
 
 def _model_available_for_pools(spec: ModelSpec, pools: frozenset[str]) -> bool:
-    if not spec.enabled:
+    if not model_visibility.is_public(spec):
         return False
     for pool_id in spec.pool_candidates():
         pool = _POOL_ID_TO_NAME[pool_id]
@@ -149,7 +150,7 @@ def _validate_chat(req: ChatCompletionRequest) -> None:
     from app.platform.errors import ValidationError
 
     spec = model_registry.get(req.model)
-    if spec is None or not spec.enabled:
+    if spec is None or not model_visibility.is_public(spec):
         raise ValidationError(
             f"Model {req.model!r} does not exist or you do not have access to it.",
             param="model",
@@ -223,7 +224,7 @@ async def chat_completions_endpoint(req: ChatCompletionRequest):
     )
 
     spec = model_registry.get(req.model)
-    if spec is None:
+    if spec is None or not model_visibility.is_public(spec):
         raise ValidationError(
             f"Model {req.model!r} does not exist or you do not have access to it.",
             param="model",
@@ -380,7 +381,7 @@ async def responses_endpoint(req: ResponsesCreateRequest):
     from app.platform.errors import ValidationError as _ValidationError
 
     spec = model_registry.get(req.model)
-    if spec is None or not spec.enabled:
+    if spec is None or not model_visibility.is_public(spec):
         raise _ValidationError(
             f"Model {req.model!r} does not exist or you do not have access to it.",
             param="model",
@@ -444,7 +445,7 @@ async def responses_endpoint(req: ResponsesCreateRequest):
 )
 async def image_generations(req: ImageGenerationRequest):
     spec = model_registry.get(req.model)
-    if spec is None or not spec.enabled or not spec.is_image():
+    if spec is None or not model_visibility.is_public(spec) or not spec.is_image():
         raise ValidationError(
             f"Model {req.model!r} is not an image model", param="model"
         )
@@ -485,6 +486,10 @@ async def videos_create(
         list[UploadFile] | None, File(alias="input_reference[]")
     ] = None,
 ):
+    spec = model_registry.get(model)
+    if spec is None or not model_visibility.is_public(spec) or not spec.is_video():
+        raise ValidationError(f"Model {model!r} is not a video model", param="model")
+
     from .video import create_video
 
     references_payload = None
@@ -545,7 +550,7 @@ async def image_edits(
     response_format: Annotated[str, Form()] = "url",
 ):
     spec = model_registry.get(model)
-    if spec is None or not spec.enabled or not spec.is_image_edit():
+    if spec is None or not model_visibility.is_public(spec) or not spec.is_image_edit():
         raise ValidationError(
             f"Model {model!r} is not an image-edit model", param="model"
         )

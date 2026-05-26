@@ -137,11 +137,9 @@ async def completions(
         len(messages),
     )
 
-    from app.dataplane.account import _directory as _acct_dir
+    from app.control.account.lifecycle import get_runtime_directory
 
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
-    directory = _acct_dir
+    directory = await get_runtime_directory()
 
     if stream:
 

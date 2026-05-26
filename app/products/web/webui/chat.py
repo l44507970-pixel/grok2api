@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.control.model import registry as model_registry
+from app.control.model import visibility as model_visibility
 from app.platform.auth.middleware import verify_webui_key
 from app.products.openai.router import chat_completions_endpoint
 from app.products.openai.schemas import ChatCompletionRequest
@@ -34,7 +35,7 @@ async def list_webui_models():
             "name": spec.public_name,
             "capability": _capability_name(spec),
         }
-        for spec in model_registry.list_enabled()
+        for spec in model_visibility.list_public(model_registry.list_enabled())
     ]
     return JSONResponse({"object": "list", "data": models})
 

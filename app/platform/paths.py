@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from app.platform.runtime.environment import is_serverless_runtime
+
 
 _ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -10,17 +12,23 @@ _ROOT_DIR = Path(__file__).resolve().parents[2]
 def _resolve_env_path(name: str, default: str) -> Path:
     raw = os.getenv(name, default).strip() or default
     path = Path(raw)
-    if not path.is_absolute():
+    if path.is_absolute():
+        return path
+    if is_serverless_runtime():
+        path = Path("/tmp/grok2api") / path
+    else:
         path = _ROOT_DIR / path
     return path
 
 
 def data_dir() -> Path:
-    return _resolve_env_path("DATA_DIR", "data")
+    default = "/tmp/grok2api/data" if is_serverless_runtime() else "data"
+    return _resolve_env_path("DATA_DIR", default)
 
 
 def log_dir() -> Path:
-    return _resolve_env_path("LOG_DIR", "logs")
+    default = "/tmp/grok2api/logs" if is_serverless_runtime() else "logs"
+    return _resolve_env_path("LOG_DIR", default)
 
 
 def data_path(*parts: str) -> Path:

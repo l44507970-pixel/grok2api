@@ -30,6 +30,7 @@ from app.platform.config.snapshot import config as _config
 from app.platform.errors import AppError
 from app.platform.meta import get_project_version
 from app.platform.paths import data_path
+from app.platform.runtime.environment import is_serverless_runtime
 from app.platform.storage import reconcile_local_media_cache_async
 
 
@@ -87,8 +88,12 @@ def _release_scheduler_lock() -> None:
 
 setup_logging(
     level=os.getenv("LOG_LEVEL", "INFO"),
-    file_logging=os.getenv("LOG_FILE_ENABLED", "true").strip().lower()
-    in {"1", "true", "yes", "on"},
+    file_logging=(
+        os.getenv("LOG_FILE_ENABLED", str(not is_serverless_runtime()))
+        .strip()
+        .lower()
+        in {"1", "true", "yes", "on"}
+    ),
 )
 
 
@@ -99,6 +104,8 @@ setup_logging(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    serverless = is_serverless_runtime()
+
     # 1. Load configuration.
     await _config.load()
     reload_logging(
@@ -107,15 +114,22 @@ async def lifespan(app: FastAPI):
         max_files=_config.get_int("logging.max_files", 7),
     )
     logger.info(
-        "application startup: service=grok2api python={} platform={}",
+        "application startup: service=grok2api python={} platform={} serverless={}",
         sys.version.split()[0],
         platform.system(),
+        serverless,
     )
 
-    # 2. Initialise account repository and bootstrap runtime table.
+    # 2. Account runtime. Traditional deployments pre-warm it at startup;
+    #    serverless deployments initialise it lazily from the request path.
     from app.control.account.backends.factory import (
-        create_repository,
         describe_repository_target,
+    )
+    from app.control.account.lifecycle import (
+        close_runtime_repository,
+        get_runtime_directory,
+        get_runtime_refresh_service,
+        get_runtime_repository,
     )
     from app.control.account.runtime import (
         reconcile_refresh_runtime,
@@ -124,7 +138,6 @@ async def lifespan(app: FastAPI):
         set_refresh_service,
     )
     from app.control.account.scheduler import get_account_refresh_scheduler
-    from app.dataplane.account import get_account_directory
 
     storage_backend, storage_target = describe_repository_target()
     logger.info(
@@ -133,25 +146,25 @@ async def lifespan(app: FastAPI):
         storage_target,
     )
 
-    repo = create_repository()
-    await repo.initialize()
+    repo = None
+    directory = None
+    refresh_svc = None
+    if serverless:
+        logger.info("serverless runtime detected: account runtime lazy initialization enabled")
+    else:
+        repo = await get_runtime_repository(app)
+        # 2a. First-boot migrations (config seed / account migration from SQLite).
+        from app.platform.startup import run_startup_migrations
 
-    # 2a. First-boot migrations (config seed / account migration from SQLite).
-    from app.platform.startup import run_startup_migrations
-
-    await run_startup_migrations(
-        config_backend=_config._get_backend(),
-        account_repo=repo,
-    )
-    # Reload config in case it was just seeded/migrated into the backend.
-    await _config.load()
-    await reconcile_local_media_cache_async()
-
-    directory = await get_account_directory(repo)
-
-    # Expose repository on app.state for admin handlers.
-    app.state.repository = repo
-    app.state.directory = directory
+        await run_startup_migrations(
+            config_backend=_config._get_backend(),
+            account_repo=repo,
+        )
+        # Reload config in case it was just seeded/migrated into the backend.
+        await _config.load()
+        await reconcile_local_media_cache_async()
+        directory = await get_runtime_directory(app)
+        refresh_svc = await get_runtime_refresh_service(app)
 
     # 3. Account directory sync loop — all workers, lightweight incremental pull.
     #    Keeps each worker's in-memory table eventually consistent with the repo.
@@ -176,6 +189,8 @@ async def lifespan(app: FastAPI):
             )
             await asyncio.sleep(interval)
             try:
+                if directory is None:
+                    continue
                 changed = await directory.sync_if_changed()
                 idle_streak = 0 if changed else min(idle_streak + 1, _SYNC_IDLE_AFTER)
             except asyncio.CancelledError:
@@ -184,7 +199,11 @@ async def lifespan(app: FastAPI):
                 logger.debug("account directory sync error: error={}", exc)
                 idle_streak = _SYNC_IDLE_AFTER  # back off on errors
 
-    sync_task = asyncio.create_task(_sync_loop(), name="account-dir-sync")
+    sync_task: asyncio.Task | None = None
+    if serverless:
+        logger.info("serverless runtime detected: account sync loop disabled")
+    else:
+        sync_task = asyncio.create_task(_sync_loop(), name="account-dir-sync")
 
     # 4. Account refresh scheduler — only the leader worker.
     #    Uses an advisory file lock so exactly one process runs the heavy
@@ -194,23 +213,19 @@ async def lifespan(app: FastAPI):
     #    strategies:
     #      - true  → "quota" selector + scheduler running (default).
     #      - false → "random" selector + scheduler idle (no upstream probing).
-    from app.control.account.refresh import AccountRefreshService
-
     refresh_enabled = _config.get_bool("account.refresh.enabled", False)
 
-    refresh_svc = AccountRefreshService(repo)
-    set_refresh_service(refresh_svc)
-    app.state.refresh_service = refresh_svc
-
-    is_leader = _try_acquire_scheduler_lock()
-    scheduler = get_account_refresh_scheduler(refresh_svc)
+    is_leader = False if serverless else _try_acquire_scheduler_lock()
+    scheduler = get_account_refresh_scheduler(refresh_svc) if refresh_svc is not None else None
     set_refresh_scheduler(scheduler)
     set_refresh_scheduler_leader(is_leader)
     app.state.account_refresh_scheduler = scheduler
     app.state.account_refresh_is_leader = is_leader
 
     strategy_name = reconcile_refresh_runtime(refresh_enabled)
-    if is_leader and strategy_name == "quota":
+    if serverless:
+        logger.info("serverless runtime detected: background schedulers disabled")
+    elif is_leader and strategy_name == "quota":
         logger.info(
             "scheduler leader: pid={} strategy=quota active_sync_s={} idle_sync_s={}",
             os.getpid(),
@@ -238,9 +253,11 @@ async def lifespan(app: FastAPI):
     from app.control.proxy import get_proxy_directory
     from app.control.proxy.scheduler import ProxyClearanceScheduler
 
-    proxy_dir = await get_proxy_directory()
-    proxy_scheduler = ProxyClearanceScheduler(proxy_dir)
-    if is_leader:
+    proxy_scheduler = None
+    if not serverless:
+        proxy_dir = await get_proxy_directory()
+        proxy_scheduler = ProxyClearanceScheduler(proxy_dir)
+    if is_leader and proxy_scheduler is not None:
         proxy_scheduler.start()
 
     logger.info("application startup completed")
@@ -250,21 +267,24 @@ async def lifespan(app: FastAPI):
     # Shutdown
     # -----------
     logger.info("application shutdown started")
-    sync_task.cancel()
-    try:
-        await sync_task
-    except asyncio.CancelledError:
-        pass
+    if sync_task is not None:
+        sync_task.cancel()
+        try:
+            await sync_task
+        except asyncio.CancelledError:
+            pass
 
-    if is_leader:
-        scheduler.stop()
-        proxy_scheduler.stop()
+    if is_leader and not serverless:
+        if scheduler is not None:
+            scheduler.stop()
+        if proxy_scheduler is not None:
+            proxy_scheduler.stop()
         _release_scheduler_lock()
 
     set_refresh_scheduler(None)
     set_refresh_scheduler_leader(False)
     set_refresh_service(None)
-    await repo.close()
+    await close_runtime_repository(app)
     logger.info("application shutdown completed")
 
 

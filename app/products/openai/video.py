@@ -30,6 +30,7 @@ from app.platform.runtime.clock import now_s
 from app.platform.storage import save_local_video
 from app.control.account.enums import FeedbackKind
 from app.control.model import registry as model_registry
+from app.control.model import visibility as model_visibility
 from app.control.model.registry import resolve as resolve_model
 from app.dataplane.proxy import get_proxy_runtime
 from app.dataplane.proxy.adapters.headers import build_http_headers
@@ -754,10 +755,9 @@ async def _run_video_with_account(
     if not spec.is_video():
         raise ValidationError(f"Model {model!r} is not a video model", param="model")
 
-    from app.dataplane.account import _directory as _acct_dir
+    from app.control.account.lifecycle import get_runtime_directory
 
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
+    _acct_dir = await get_runtime_directory()
 
     acct = await _acct_dir.reserve(
         pool_candidates=spec.pool_candidates(),
@@ -842,10 +842,9 @@ async def _run_video_job(
         resolved_preset = _resolve_video_preset(preset)
         spec = resolve_model(job.model)
 
-        from app.dataplane.account import _directory as _acct_dir
+        from app.control.account.lifecycle import get_runtime_directory
 
-        if _acct_dir is None:
-            raise RateLimitError("Account directory not initialised")
+        _acct_dir = await get_runtime_directory()
 
         acct = await _acct_dir.reserve(
             pool_candidates=spec.pool_candidates(),
@@ -924,7 +923,7 @@ async def create_video(
     input_references: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     spec = model_registry.get(model)
-    if spec is None or not spec.enabled or not spec.is_video():
+    if spec is None or not model_visibility.is_public(spec) or not spec.is_video():
         raise ValidationError(f"Model {model!r} is not a video model", param="model")
 
     cleaned_prompt = (prompt or "").strip()

@@ -27,9 +27,9 @@ class VoiceTokenRequest(BaseModel):
 @router.post("/voice/token", response_model=VoiceTokenResponse)
 async def voice_token(request: VoiceTokenRequest):
     """Acquire a LiveKit voice session token."""
-    from app.dataplane.account import _directory as _acct_dir
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
+    from app.control.account.lifecycle import get_runtime_directory
+
+    _acct_dir = await get_runtime_directory()
 
     # Voice uses auto mode, which is available on super/heavy pools only.
     from app.control.model.enums import ModeId

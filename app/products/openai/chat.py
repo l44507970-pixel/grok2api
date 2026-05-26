@@ -497,11 +497,9 @@ async def completions(
     if not message.strip():
         raise UpstreamError("Empty message after extraction", status=400)
 
-    from app.dataplane.account import _directory as _acct_dir
+    from app.control.account.lifecycle import get_runtime_directory
 
-    if _acct_dir is None:
-        raise RateLimitError("Account directory not initialised")
-    directory = _acct_dir
+    directory = await get_runtime_directory()
 
     max_retries = selection_max_retries()
     retry_codes = _configured_retry_codes(cfg)

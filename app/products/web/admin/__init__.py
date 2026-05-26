@@ -13,9 +13,14 @@ from fastapi.responses import Response
 from pydantic import RootModel
 
 from app.control.account.backends.factory import get_repository_backend
+from app.control.account.lifecycle import (
+    get_runtime_directory,
+    get_runtime_refresh_service,
+    get_runtime_repository,
+)
 from app.platform.auth.middleware import verify_admin_key
 from app.platform.config.snapshot import config
-from app.platform.errors import AppError, ErrorKind, ValidationError
+from app.platform.errors import ValidationError
 from app.platform.logging.logger import logger, reload_file_logging
 from app.platform.storage import reconcile_local_media_cache_async
 
@@ -143,14 +148,14 @@ def _patch_touches_prefix(payload: dict[str, Any], prefix: str) -> bool:
     )
 
 
-def get_repo(request: Request) -> "AccountRepository":
+async def get_repo(request: Request) -> "AccountRepository":
     """Resolve the singleton AccountRepository from app state."""
-    return request.app.state.repository
+    return await get_runtime_repository(request.app)
 
 
-def get_refresh_svc(request: Request) -> "AccountRefreshService":
+async def get_refresh_svc(request: Request) -> "AccountRefreshService":
     """Resolve the singleton AccountRefreshService from app state."""
-    return request.app.state.refresh_service
+    return await get_runtime_refresh_service(request.app)
 
 
 # ---------------------------------------------------------------------------
@@ -224,22 +229,15 @@ async def get_storage_mode():
 @router.get("/status", tags=[_TAG_ADMIN_SYSTEM])
 async def runtime_status():
     from app.control.account.runtime import reconcile_refresh_runtime
-    from app.dataplane.account import _directory
 
-    if _directory is None:
-        raise AppError(
-            "Account directory not initialised",
-            kind=ErrorKind.SERVER,
-            code="directory_not_initialised",
-            status=503,
-        )
+    directory = await get_runtime_directory()
     strategy_name = reconcile_refresh_runtime()
     return Response(
         content=orjson.dumps(
             {
                 "status": "ok",
-                "size": _directory.size,
-                "revision": _directory.revision,
+                "size": directory.size,
+                "revision": directory.revision,
                 "selection_strategy": strategy_name,
             }
         ),
@@ -249,18 +247,10 @@ async def runtime_status():
 
 @router.post("/sync", tags=[_TAG_ADMIN_SYSTEM])
 async def force_sync():
-    from app.dataplane.account import _directory
-
-    if _directory is None:
-        raise AppError(
-            "Account directory not initialised",
-            kind=ErrorKind.SERVER,
-            code="directory_not_initialised",
-            status=503,
-        )
-    changed = await _directory.sync_if_changed()
+    directory = await get_runtime_directory()
+    changed = await directory.sync_if_changed()
     return Response(
-        content=orjson.dumps({"changed": changed, "revision": _directory.revision}),
+        content=orjson.dumps({"changed": changed, "revision": directory.revision}),
         media_type="application/json",
     )
 

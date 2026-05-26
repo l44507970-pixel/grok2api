@@ -1,15 +1,31 @@
 """Shared account selection helpers for products-layer request handlers."""
 
+import asyncio
+
 from app.control.model.enums import ModeId
 from app.control.model.spec import ModelSpec
 from app.control.account.runtime import get_refresh_service
 from app.dataplane.account.selector import current_strategy
 from app.platform.config.snapshot import get_config
+from app.platform.logging.logger import logger
+from app.platform.runtime.environment import is_serverless_runtime
 
 # Random strategy has no config key for retry count; it is pinned here so that
 # every retry-driven call site (chat / images / video / anthropic) sees the same
 # value without introducing scattered magic numbers.
 _RANDOM_MAX_RETRIES = 5
+_refresh_task: asyncio.Task | None = None
+
+
+def _log_refresh_task(task: "asyncio.Task") -> None:
+    global _refresh_task
+    if task is _refresh_task:
+        _refresh_task = None
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc:
+        logger.warning("account on-demand refresh failed: error={}", exc)
 
 
 def selection_max_retries() -> int:
@@ -77,9 +93,25 @@ async def reserve_account(
 
     refresh_svc = get_refresh_service()
     if refresh_svc is not None:
-        await refresh_svc.refresh_on_demand()
-        lease, selected_mode_id = await _try_reserve()
-        if lease is not None:
-            return lease, selected_mode_id
+        timeout_s = max(0.0, float(get_config("account.refresh.on_demand_timeout_sec", 3)))
+        if is_serverless_runtime() or timeout_s <= 0:
+            global _refresh_task
+            if _refresh_task is None or _refresh_task.done():
+                _refresh_task = asyncio.create_task(
+                    refresh_svc.refresh_on_demand(),
+                    name="account-refresh-on-demand",
+                )
+                _refresh_task.add_done_callback(_log_refresh_task)
+        else:
+            try:
+                await asyncio.wait_for(refresh_svc.refresh_on_demand(), timeout=timeout_s)
+                lease, selected_mode_id = await _try_reserve()
+                if lease is not None:
+                    return lease, selected_mode_id
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "account on-demand refresh timed out: timeout_s={}",
+                    timeout_s,
+                )
 
     return None, original_mode_id

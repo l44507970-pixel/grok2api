@@ -17,6 +17,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from app.platform.runtime.clock import now_ms
+from app.platform.runtime.environment import is_serverless_runtime
 from ..commands import AccountPatch, AccountUpsert, BulkReplacePoolCommand, ListAccountsQuery
 from ..enums import AccountStatus
 from ..models import (
@@ -354,19 +355,10 @@ def _prepare_sql_url_and_connect_args(
     return cleaned_url, _build_sql_connect_args(dialect, ssl_options)
 
 
-def _is_serverless() -> bool:
-    """Detect common serverless environments (Vercel, AWS Lambda, etc.)."""
-    return bool(
-        os.getenv("VERCEL")
-        or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
-        or os.getenv("FUNCTIONS_WORKER_RUNTIME")  # Azure Functions
-    )
-
-
 def _sql_engine_kwargs(connect_args: dict[str, Any] | None) -> dict[str, Any]:
     # In serverless environments each function instance is short-lived and may
     # run concurrently.  Keep pools small to avoid exhausting DB connections.
-    serverless = _is_serverless()
+    serverless = is_serverless_runtime()
     kwargs: dict[str, Any] = {
         "pool_size":    _get_env_int("ACCOUNT_SQL_POOL_SIZE",    1 if serverless else 5,  minimum=1),
         "max_overflow": _get_env_int("ACCOUNT_SQL_MAX_OVERFLOW", 2 if serverless else 10, minimum=0),

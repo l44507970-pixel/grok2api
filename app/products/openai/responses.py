@@ -216,6 +216,8 @@ async def create(
     tools:        list[dict] | None = None,
     tool_choice:  Any = None,
     reasoning_effort: str | None = None,
+    response_format: Any = None,
+    text: dict[str, Any] | None = None,
 ) -> dict | AsyncGenerator[str, None]:
 
     cfg     = get_config()
@@ -246,6 +248,8 @@ async def create(
             reasoning_effort=reasoning_effort,
             tools=tools,
             tool_choice=tool_choice,
+            response_format=response_format,
+            text=text,
         )
 
     message, files = _extract_message(messages)

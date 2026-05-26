@@ -311,6 +311,7 @@ async def chat_completions_endpoint(req: ChatCompletionRequest):
                 temperature=req.temperature or 0.8,
                 top_p=req.top_p or 0.95,
                 reasoning_effort=req.reasoning_effort,
+                response_format=req.response_format,
             )
 
     except AppError:
@@ -421,9 +422,11 @@ async def responses_endpoint(req: ResponsesCreateRequest):
         emit_think=emit_think,
         temperature=req.temperature or 0.8,
         top_p=req.top_p or 0.95,
-        tools=req.tools or None,
+        tools=req.tools,
         tool_choice=req.tool_choice,
         reasoning_effort=reasoning_effort,
+        response_format=req.response_format,
+        text=req.text,
     )
 
     if isinstance(result, dict):

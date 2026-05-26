@@ -122,6 +122,8 @@ async def create(
     reasoning_effort: str | None = None,
     tools: list[dict] | None = None,
     tool_choice: Any = None,
+    response_format: Any = None,
+    text: dict[str, Any] | None = None,
 ) -> dict | AsyncGenerator[str, None]:
     """Route a Responses request through console.x.ai/v1/responses."""
     cfg = get_config()
@@ -133,7 +135,7 @@ async def create(
 
     if tools:
         logger.info(
-            "console responses function tools ignored: model={} tool_count={} choice={}",
+            "console responses tools requested: model={} tool_count={} choice={}",
             model,
             len(tools),
             tool_choice,
@@ -172,6 +174,10 @@ async def create(
                         top_p=top_p,
                         reasoning_effort=effort,
                         stream=True,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        response_format=response_format,
+                        text=text,
                     )
 
                     try:
@@ -360,6 +366,10 @@ async def create(
                 top_p=top_p,
                 reasoning_effort=effort,
                 stream=True,
+                tools=tools,
+                tool_choice=tool_choice,
+                response_format=response_format,
+                text=text,
             )
 
             try:

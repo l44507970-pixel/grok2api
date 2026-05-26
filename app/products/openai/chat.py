@@ -457,6 +457,7 @@ async def completions(
     temperature: float = 0.8,
     top_p: float = 0.95,
     reasoning_effort: str | None = None,
+    response_format: Any = None,
     request_overrides: dict | None = None,
 ) -> dict | AsyncGenerator[str, None]:
     """Entry point for /v1/chat/completions.
@@ -491,6 +492,7 @@ async def completions(
             reasoning_effort=reasoning_effort,
             tools=tools,
             tool_choice=tool_choice,
+            response_format=response_format,
         )
 
     message, files = _extract_message(messages)

@@ -112,7 +112,7 @@ async def messages_endpoint(req: MessagesRequest):
         emit_think   = emit_think,
         temperature  = req.temperature or 0.8,
         top_p        = req.top_p or 0.95,
-        tools        = req.tools or None,
+        tools        = req.tools,
         tool_choice  = req.tool_choice,
     )
 

@@ -31,6 +31,7 @@ class ChatCompletionRequest(BaseModel):
     messages:            list[MessageItem]
     stream:              bool | None                = None
     reasoning_effort:    str | None                 = None
+    response_format:     str | dict[str, Any] | None = None
     temperature:         float | None               = 0.8
     top_p:               float | None               = 0.95
     image_config:        ImageConfig | None         = None
@@ -76,6 +77,8 @@ class ResponsesCreateRequest(BaseModel):
     max_output_tokens:    int | None            = None
     tools:                list[Any] | None      = None
     tool_choice:          Any | None            = None
+    text:                 dict[str, Any] | None  = None
+    response_format:      str | dict[str, Any] | None = None
     previous_response_id: str | None            = None
     store:                bool | None           = None
     metadata:             dict[str, Any] | None = None

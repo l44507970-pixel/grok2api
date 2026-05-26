@@ -70,6 +70,9 @@ _EFFORT_MAP: dict[str, str] = {
     "xhigh": "xhigh",
 }
 
+_WEB_SEARCH_ALIASES = frozenset({"web_search", "web_search_preview"})
+_X_SEARCH_ALIASES = frozenset({"x_search", "x_keyword_search", "x_semantic_search"})
+
 
 def _api_role(role: str) -> str:
     if role in {"system", "developer", "assistant"}:
@@ -127,6 +130,133 @@ def _content_blocks(msg: dict[str, Any]) -> list[dict[str, Any]]:
     return blocks
 
 
+def _default_console_tools() -> list[dict[str, Any]]:
+    return [
+        {"type": "web_search", "enable_image_understanding": True},
+        {"type": "x_search", "enable_video_understanding": True},
+    ]
+
+
+def _normalize_console_tool(tool: Any) -> dict[str, Any] | None:
+    if not isinstance(tool, dict):
+        return None
+    tool_type = str(tool.get("type") or "").strip()
+    if tool_type in _WEB_SEARCH_ALIASES:
+        normalized = dict(tool)
+        normalized["type"] = "web_search"
+        normalized.setdefault("enable_image_understanding", True)
+        return normalized
+    if tool_type in _X_SEARCH_ALIASES:
+        normalized = dict(tool)
+        normalized["type"] = "x_search"
+        normalized.setdefault("enable_video_understanding", True)
+        return normalized
+    return None
+
+
+def _has_console_tool(tools: list[dict[str, Any]]) -> bool:
+    return any(_normalize_console_tool(tool) is not None for tool in tools)
+
+
+def _console_tools(
+    *,
+    console_model: str,
+    tools: list[dict[str, Any]] | None,
+    tool_choice: Any = None,
+) -> list[dict[str, Any]]:
+    if console_model not in _MODELS_WITH_SEARCH_TOOLS:
+        return []
+    if tool_choice == "none":
+        return []
+    if tools is None:
+        return _default_console_tools()
+    if not tools:
+        return []
+    enabled = [
+        normalized
+        for tool in tools
+        if (normalized := _normalize_console_tool(tool)) is not None
+    ]
+    return enabled or _default_console_tools()
+
+
+def _tool_choice_for_console(
+    tool_choice: Any,
+    enabled_tools: list[dict[str, Any]],
+) -> Any:
+    if not enabled_tools:
+        return None
+    if tool_choice is None:
+        return "auto"
+    if isinstance(tool_choice, str):
+        return tool_choice if tool_choice in {"auto", "none", "required"} else "auto"
+    if isinstance(tool_choice, dict):
+        forced_type = str(tool_choice.get("type") or "").strip()
+        if forced_type in _WEB_SEARCH_ALIASES:
+            return {"type": "web_search"}
+        if forced_type in _X_SEARCH_ALIASES:
+            return {"type": "x_search"}
+        forced_name = str((tool_choice.get("function") or {}).get("name") or "").strip()
+        if forced_name in _WEB_SEARCH_ALIASES:
+            return {"type": "web_search"}
+        if forced_name in _X_SEARCH_ALIASES:
+            return {"type": "x_search"}
+    return "auto"
+
+
+def _normalize_response_format(response_format: Any) -> dict[str, Any] | None:
+    if response_format is None:
+        return None
+    if isinstance(response_format, str):
+        fmt_type = response_format.strip()
+        return {"type": fmt_type} if fmt_type else None
+    if not isinstance(response_format, dict):
+        return None
+
+    if "format" in response_format and isinstance(response_format.get("format"), dict):
+        return _normalize_response_format(response_format.get("format"))
+
+    fmt_type = str(response_format.get("type") or "").strip()
+    if not fmt_type:
+        return None
+
+    if fmt_type == "json_schema":
+        json_schema = response_format.get("json_schema")
+        source = json_schema if isinstance(json_schema, dict) else response_format
+        normalized: dict[str, Any] = {"type": "json_schema"}
+        normalized["name"] = str(source.get("name") or "response")
+        if source.get("description") is not None:
+            normalized["description"] = source.get("description")
+        normalized["schema"] = source.get("schema") or {}
+        if source.get("strict") is not None:
+            normalized["strict"] = bool(source.get("strict"))
+        return normalized
+
+    normalized = dict(response_format)
+    normalized["type"] = fmt_type
+    normalized.pop("json_schema", None)
+    return normalized
+
+
+def _console_text_config(
+    *,
+    response_format: Any = None,
+    text: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if isinstance(text, dict):
+        config = dict(text)
+        normalized = _normalize_response_format(config.get("format"))
+        if normalized:
+            config["format"] = normalized
+        if config:
+            return config
+
+    normalized = _normalize_response_format(response_format)
+    if normalized:
+        return {"format": normalized}
+    return None
+
+
 def build_console_payload(
     *,
     messages: list[dict[str, Any]],
@@ -135,6 +265,10 @@ def build_console_payload(
     top_p: float = 0.95,
     reasoning_effort: str | None = None,
     stream: bool = True,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: Any = None,
+    response_format: Any = None,
+    text: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the JSON payload for ``POST console.x.ai/v1/responses``."""
     input_items: list[dict[str, Any]] = []
@@ -170,19 +304,37 @@ def build_console_payload(
     if console_model in _MODELS_WITH_REASONING_FIELD:
         payload["reasoning"] = {"effort": effort}
 
-    if console_model in _MODELS_WITH_SEARCH_TOOLS:
-        payload["tools"] = [
-            {"type": "web_search", "enable_image_understanding": True},
-            {"type": "x_search", "enable_video_understanding": True},
-        ]
-        payload["tool_choice"] = "auto"
+    enabled_tools = _console_tools(
+        console_model=console_model,
+        tools=tools,
+        tool_choice=tool_choice,
+    )
+    if enabled_tools:
+        payload["tools"] = enabled_tools
+        effective_tool_choice = (
+            None
+            if tools is not None and tools and not _has_console_tool(tools)
+            else tool_choice
+        )
+        normalized_tool_choice = _tool_choice_for_console(
+            effective_tool_choice,
+            enabled_tools,
+        )
+        if normalized_tool_choice is not None:
+            payload["tool_choice"] = normalized_tool_choice
+
+    text_config = _console_text_config(response_format=response_format, text=text)
+    if text_config:
+        payload["text"] = text_config
 
     logger.debug(
-        "console payload built: model={} console_model={} input_items={} has_reasoning={}",
+        "console payload built: model={} console_model={} input_items={} has_reasoning={} tool_count={} has_text_format={}",
         model,
         console_model,
         len(input_items),
         console_model in _MODELS_WITH_REASONING_FIELD,
+        len(enabled_tools),
+        bool(text_config),
     )
     return payload
 

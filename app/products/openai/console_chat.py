@@ -112,6 +112,7 @@ async def completions(
     reasoning_effort: str | None = None,
     tools: list[dict] | None = None,
     tool_choice: Any = None,
+    response_format: Any = None,
 ) -> dict | AsyncGenerator[str, None]:
     """Route a Chat Completions request through console.x.ai/v1/responses."""
     cfg = get_config()
@@ -124,7 +125,7 @@ async def completions(
 
     if tools:
         logger.info(
-            "console chat function tools ignored: model={} tool_count={} choice={}",
+            "console chat tools requested: model={} tool_count={} choice={}",
             model,
             len(tools),
             tool_choice,
@@ -169,6 +170,9 @@ async def completions(
                         top_p=top_p,
                         reasoning_effort=effort,
                         stream=True,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        response_format=response_format,
                     )
 
                     try:
@@ -269,6 +273,9 @@ async def completions(
                 top_p=top_p,
                 reasoning_effort=effort,
                 stream=True,
+                tools=tools,
+                tool_choice=tool_choice,
+                response_format=response_format,
             )
 
             try:

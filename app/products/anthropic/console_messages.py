@@ -106,7 +106,7 @@ async def create(
 
     if tools:
         logger.info(
-            "console messages function tools ignored: model={} tool_count={} choice={}",
+            "console messages tools requested: model={} tool_count={} choice={}",
             model,
             len(tools),
             tool_choice,
@@ -145,6 +145,8 @@ async def create(
                         top_p=top_p,
                         reasoning_effort=effort,
                         stream=True,
+                        tools=tools,
+                        tool_choice=tool_choice,
                     )
 
                     try:
@@ -290,6 +292,8 @@ async def create(
                 top_p=top_p,
                 reasoning_effort=effort,
                 stream=True,
+                tools=tools,
+                tool_choice=tool_choice,
             )
 
             try:

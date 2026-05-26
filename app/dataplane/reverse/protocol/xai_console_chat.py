@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator
 import orjson
 
 from app.control.proxy.models import ProxyFeedback, ProxyFeedbackKind
-from app.dataplane.reverse.runtime.endpoint_table import CONSOLE_BASE, CONSOLE_RESPONSES
+from app.dataplane.reverse.runtime.endpoint_table import CONSOLE_RESPONSES
 from app.dataplane.reverse.transport._proxy_feedback import upstream_feedback
 from app.platform.errors import UpstreamError
 from app.platform.logging.logger import logger
@@ -259,7 +259,9 @@ async def stream_console_chat(
     from app.dataplane.proxy.adapters.session import ResettableSession, build_session_kwargs
 
     proxy = await get_proxy_runtime()
-    lease = await proxy.acquire(clearance_origin=CONSOLE_BASE)
+    # console.x.ai 与 grok.com 共用 SSO/CF 访问态。这里沿用默认 grok.com
+    # clearance，与参考项目保持一致，避免单独按 console.x.ai 生成无效 clearance。
+    lease = await proxy.acquire()
     headers = build_console_headers(token, lease=lease)
     session_kwargs = build_session_kwargs(lease=lease)
 
@@ -296,6 +298,10 @@ async def stream_console_chat(
             await proxy.feedback(lease, upstream_feedback(err))
             raise err
 
+        # 上游已经接受请求，proxy/clearance 已完成它们该完成的部分。
+        # high/xhigh 这类长 SSE 流后续可能因平台或客户端中断，不应误伤代理池。
+        await proxy.feedback(lease, _success_feedback())
+
         current_event = ""
         try:
             async for raw_line in response.aiter_lines():
@@ -308,20 +314,15 @@ async def stream_console_chat(
                     yield current_event, value
                     current_event = ""
                 elif kind == "done":
-                    await proxy.feedback(lease, _success_feedback())
                     return
-        except UpstreamError as exc:
-            await proxy.feedback(lease, upstream_feedback(exc))
+        except UpstreamError:
             raise
         except Exception as exc:
-            await proxy.feedback(lease, _transport_feedback())
             raise UpstreamError(
                 f"Console stream read failed: {exc}",
                 status=502,
                 body=str(exc).replace("\n", "\\n")[:400],
             ) from exc
-
-        await proxy.feedback(lease, _success_feedback())
 
 
 __all__ = [

@@ -71,7 +71,7 @@ serverless_console_only = true
 # Vercel / serverless 下默认隐藏实验性或不稳定的 console 别名
 serverless_stable_console_only = true
 # 留空使用内置稳定列表；可用逗号分隔字符串或 TOML 数组覆盖
-serverless_console_allowlist = []
+serverless_model_allowlist = []
 
 
 # ==================== 本地缓存 ====================

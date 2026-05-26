@@ -5,10 +5,11 @@ from app.platform.config.snapshot import get_config
 from app.platform.runtime.environment import is_serverless_runtime
 
 
-# Serverless deployments usually only configure console.x.ai cookies. Keep the
-# public list conservative so model testers do not probe the old grok.com path.
-_DEFAULT_SERVERLESS_CONSOLE_ALLOWLIST = frozenset(
+# Serverless deployments should avoid exposing the whole legacy grok.com model
+# surface, but a few non-console models are still useful and known to work.
+_DEFAULT_SERVERLESS_MODEL_ALLOWLIST = frozenset(
     {
+        "grok-imagine-image-lite",
         "grok-4.3-console",
         "grok-4.3-low",
         "grok-4.3-medium",
@@ -16,6 +17,10 @@ _DEFAULT_SERVERLESS_CONSOLE_ALLOWLIST = frozenset(
         "grok-4.20-0309-console",
         "grok-4.20-0309-non-reasoning-console",
         "grok-4.20-multi-agent-console",
+        "grok-4.20-multi-agent-low",
+        "grok-4.20-multi-agent-medium",
+        "grok-4.20-multi-agent-high",
+        "grok-4.20-multi-agent-xhigh",
     }
 )
 
@@ -38,16 +43,18 @@ def stable_console_only_enabled() -> bool:
     return bool(get_config("models.serverless_stable_console_only", True))
 
 
-def _serverless_console_allowlist() -> frozenset[str]:
-    configured = get_config("models.serverless_console_allowlist", None)
+def _serverless_model_allowlist() -> frozenset[str]:
+    configured = get_config("models.serverless_model_allowlist", None)
     if not configured:
-        return _DEFAULT_SERVERLESS_CONSOLE_ALLOWLIST
+        configured = get_config("models.serverless_console_allowlist", None)
+    if not configured:
+        return _DEFAULT_SERVERLESS_MODEL_ALLOWLIST
     if isinstance(configured, list):
         values = configured
     else:
         values = str(configured).split(",")
     allowed = frozenset(str(item).strip() for item in values if str(item).strip())
-    return allowed or _DEFAULT_SERVERLESS_CONSOLE_ALLOWLIST
+    return allowed or _DEFAULT_SERVERLESS_MODEL_ALLOWLIST
 
 
 def is_public(spec: ModelSpec) -> bool:
@@ -56,10 +63,11 @@ def is_public(spec: ModelSpec) -> bool:
         return False
     if not console_only_enabled():
         return True
+    allowlist = _serverless_model_allowlist()
     if not spec.is_console_chat():
-        return False
+        return spec.model_name in allowlist
     if stable_console_only_enabled():
-        return spec.model_name in _serverless_console_allowlist()
+        return spec.model_name in allowlist
     return True
 
 

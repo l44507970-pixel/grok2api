@@ -243,6 +243,36 @@ Runtime config can also be overridden with `GROK_`-prefixed environment variable
 | `grok-4.20-heavy` | `heavy` | `heavy` |
 | `grok-4.3-beta` | `grok-420-computer-use-sa` | `super` |
 
+### Chat (console.x.ai free accounts)
+
+These models are routed through `console.x.ai` with an SSO token and do not consume paid account quota.
+
+| Model | reasoning effort | Description |
+| :-- | :-- | :-- |
+| `grok-4.3-console` | user supplied (default medium) | Free account |
+| `grok-4.3-low` | low (fixed) | Free account |
+| `grok-4.3-medium` | medium (fixed) | Free account |
+| `grok-4.3-high` | high (fixed) | Free account |
+| `grok-4.20-0309-console` | default | Free account |
+| `grok-4.20-0309-reasoning-console` | fixed reasoning | Free account |
+| `grok-4.20-0309-non-reasoning-console` | no reasoning | Free account |
+| `grok-4.20-multi-agent-console` | user supplied (default medium) | Free account, multi-agent; agent count depends on effort |
+| `grok-4.20-multi-agent-low` | low (fixed) -> 4 agents | Free account, multi-agent |
+| `grok-4.20-multi-agent-medium` | medium (fixed) -> 4 agents | Free account, multi-agent |
+| `grok-4.20-multi-agent-high` | high (fixed) -> 16 agents | Free account, multi-agent |
+| `grok-4.20-multi-agent-xhigh` | xhigh (fixed) -> 16 agents | Free account, multi-agent |
+| `grok-build-console` | default | Free account, Grok Build 0.1 |
+
+> Multi-agent models: `low`/`medium` use 4 agents for quick research; `high`/`xhigh` use 16 agents for deep research.
+
+### Console Model Quota
+
+| Quota type | Count | Window | Description |
+| :-- | :-- | :-- | :-- |
+| C (Console) | 30 requests | 15 minutes | Shared by all `*-console` / `*-low` / `*-medium` / `*-high` / `*-xhigh` models |
+
+This is a local estimated quota used for free-account selection and admin display; the actual upstream limit may change with xAI policy.
+
 ### Image
 
 | Model | mode | tier |

@@ -167,6 +167,7 @@
     "statFast": "Fast-Guthaben",
     "statExpert": "Expert-Guthaben",
     "statHeavy": "Heavy-Guthaben",
+    "statConsole": "Console-Guthaben",
     "filterStatusLabel": "Status",
     "filterNsfwLabel": "NSFW",
     "filterTypeLabel": "Typ",
@@ -297,8 +298,15 @@
       "fast": "Fast",
       "expert": "Expert",
       "heavy": "Heavy",
-      "grok_4_3": "Grok 4.3 Beta"
+      "grok_4_3": "Grok 4.3 Beta",
+      "console": "Console"
     },
+    "quotaReset": "Zurücksetzen",
+    "quotaSynced": "Synchronisiert",
+    "quotaSource": "Quelle",
+    "quotaSourceDefault": "Standard",
+    "quotaSourceReal": "Echt",
+    "quotaSourceEstimated": "Geschätzt",
     "status": {
       "active": "Aktiv",
       "cooling": "Ratenbegrenzt",

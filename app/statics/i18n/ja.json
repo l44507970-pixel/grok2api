@@ -167,6 +167,7 @@
     "statFast": "Fast 残高",
     "statExpert": "Expert 残高",
     "statHeavy": "Heavy 残高",
+    "statConsole": "Console 残高",
     "filterStatusLabel": "状態",
     "filterNsfwLabel": "NSFW",
     "filterTypeLabel": "タイプ",
@@ -297,8 +298,15 @@
       "fast": "Fast",
       "expert": "Expert",
       "heavy": "Heavy",
-      "grok_4_3": "Grok 4.3 Beta"
+      "grok_4_3": "Grok 4.3 Beta",
+      "console": "Console"
     },
+    "quotaReset": "リセット",
+    "quotaSynced": "同期",
+    "quotaSource": "ソース",
+    "quotaSourceDefault": "デフォルト",
+    "quotaSourceReal": "実測",
+    "quotaSourceEstimated": "推定",
     "status": {
       "active": "有効",
       "cooling": "レート制限中",

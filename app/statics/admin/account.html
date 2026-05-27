@@ -83,9 +83,7 @@
       gap:12px;
       margin-bottom:20px;
     }
-    .stat-grid.mode-random {
-      grid-template-columns:repeat(4, minmax(0, 1fr));
-    }
+    .stat-grid.mode-random { grid-template-columns:repeat(5, minmax(0, 1fr)); }
     .stat-cell {
       min-height:88px;
       padding:14px 16px;
@@ -129,7 +127,7 @@
       margin-top:auto;
     }
     .stat-muted { color:#a1a1aa !important; }
-    [data-random-only] { display:none }
+    [data-random-only] { display:flex }
     .stat-grid.mode-random [data-random-only] { display:flex }
     .stat-grid.mode-random [data-stat-card="active"] { order:1 }
     .stat-grid.mode-random [data-stat-card="cooling"] { order:2 }
@@ -139,6 +137,11 @@
     .stat-grid.mode-random [data-stat-card="calls"] { order:6 }
     .stat-grid.mode-random [data-stat-card="success"] { order:7 }
     .stat-grid.mode-random [data-stat-card="rate"] { order:8 }
+    .stat-grid.mode-random [data-stat-card="quota-auto"] { order:9 }
+    .stat-grid.mode-random [data-stat-card="quota-fast"] { order:10 }
+    .stat-grid.mode-random [data-stat-card="quota-expert"] { order:11 }
+    .stat-grid.mode-random [data-stat-card="quota-heavy"] { order:12 }
+    .stat-grid.mode-random [data-stat-card="quota-console"] { order:13 }
 
     /* Filters */
     .filter-bar {
@@ -559,6 +562,7 @@
     .q-e { background:#f7f3fb; color:#8d6bbd }
     .q-h { background:#fff4ed; color:#b0632a }
     .q-b { background:#fdf2f7; color:#be3f7f }
+    .q-c { background:#eef8f6; color:#168070 }
     .q-z { background:#f6f6f6; color:#a0a0a6 }
 
     /* Token monospace */
@@ -813,7 +817,7 @@
       </div>
       <div class="stat-num" id="s-rate" style="color:#7c3aed">0%</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-stat-card="quota-auto" data-quota-only>
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statAuto">Auto 余额</div>
         <span class="stat-icon" style="color:#2563eb">
@@ -822,7 +826,7 @@
       </div>
       <div class="stat-num" id="s-qa" style="color:#2563eb">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-stat-card="quota-fast" data-quota-only>
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statFast">Fast 余额</div>
         <span class="stat-icon" style="color:#16a34a">
@@ -831,7 +835,7 @@
       </div>
       <div class="stat-num" id="s-qf" style="color:#16a34a">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-stat-card="quota-expert" data-quota-only>
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statExpert">Expert 余额</div>
         <span class="stat-icon" style="color:#7c3aed">
@@ -840,7 +844,7 @@
       </div>
       <div class="stat-num" id="s-qe" style="color:#7c3aed">0</div>
     </div>
-    <div class="stat-cell" data-quota-only>
+    <div class="stat-cell" data-stat-card="quota-heavy" data-quota-only>
       <div class="stat-top">
         <div class="stat-label" data-i18n="account.statHeavy">Heavy 余额</div>
         <span class="stat-icon" style="color:#b0632a">
@@ -848,6 +852,15 @@
         </span>
       </div>
       <div class="stat-num" id="s-qh" style="color:#b0632a">0</div>
+    </div>
+    <div class="stat-cell" data-stat-card="quota-console" data-quota-only>
+      <div class="stat-top">
+        <div class="stat-label" data-i18n="account.statConsole">Console 余额</div>
+        <span class="stat-icon" style="color:#168070">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M5 18h14"/><path d="M8 15V9"/><path d="M12 15V6"/><path d="M16 15v-4"/></svg>
+        </span>
+      </div>
+      <div class="stat-num" id="s-qc" style="color:#168070">0</div>
     </div>
   </div>
 
@@ -978,6 +991,8 @@
               <span class="q-pill q-f">F</span>
               <span class="q-pill q-e">E</span>
               <span class="q-pill q-h">H</span>
+              <span class="q-pill q-b">B</span>
+              <span class="q-pill q-c">C</span>
             </span>
           </th>
           <th class="table-center" data-i18n="account.colSuccess">成功</th>
@@ -1174,7 +1189,7 @@ async function _api(method, path, body) {
 }
 
 // Selection strategy reported by /status — "quota" | "random".
-// Controls whether quota columns / stats are rendered (hidden in random mode).
+// Random mode still shows local estimated quotas; it only changes account selection.
 let selectionStrategy = 'quota';
 
 // ── Load ───────────────────────────────────────────────────────────────────
@@ -1198,13 +1213,9 @@ async function load() {
 }
 
 function applyStrategyUI() {
-  // Random strategy: hide quota-related stat cells and the table column.
   const isRandom = selectionStrategy === 'random';
   const statsGrid = document.getElementById('overview-stats');
   if (statsGrid) statsGrid.classList.toggle('mode-random', isRandom);
-  document.querySelectorAll('[data-quota-only]').forEach(el => {
-    el.style.display = isRandom ? 'none' : '';
-  });
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -1232,6 +1243,8 @@ function getTokenView() {
     qf: 0,
     qe: 0,
     qh: 0,
+    qb: 0,
+    qc: 0,
   };
   const statusCounts = { all: 0, active: 0, cooling: 0, invalid: 0, disabled: 0 };
   const nsfwCounts = { all: 0, enabled: 0, disabled: 0 };
@@ -1260,6 +1273,8 @@ function getTokenView() {
     stats.qf += quota.fast?.remaining || 0;
     stats.qe += quota.expert?.remaining || 0;
     stats.qh += quota.heavy?.remaining || 0;
+    stats.qb += quota.grok_4_3?.remaining || 0;
+    stats.qc += quota.console?.remaining || 0;
 
     if (token.status === 'active') stats.active += 1;
     if (token.status === 'cooling') stats.cooling += 1;
@@ -1327,7 +1342,7 @@ function renderStats(view = getTokenView()) {
   $('s-calls', fmt(stats.calls));
   $('s-success', fmt(stats.success));
   $('s-rate', fmtRate(stats.success, stats.fail));
-  $('s-qa', fmt(stats.qa)); $('s-qf', fmt(stats.qf)); $('s-qe', fmt(stats.qe)); $('s-qh', fmt(stats.qh));
+  $('s-qa', fmt(stats.qa)); $('s-qf', fmt(stats.qf)); $('s-qe', fmt(stats.qe)); $('s-qh', fmt(stats.qh)); $('s-qc', fmt(stats.qc));
 }
 
 function renderFilters(view = getTokenView()) {
@@ -1520,6 +1535,7 @@ function qpills(q) {
     ['expert',   'E', 'q-e', true],
     ['heavy',    'H', 'q-h', true],
     ['grok_4_3', 'B', 'q-b', false],
+    ['console',  'C', 'q-c', true],
   ];
   return modes.map(([m,l,c,showEmpty]) => {
     const win = q[m];
@@ -1528,8 +1544,30 @@ function qpills(q) {
       return `<span class="q-pill q-z" data-tip="${xe(tr(`account.mode.${m}`, null, m))}: 0">${l}:0</span>`;
     }
     const r = win.remaining ?? null;
-    return `<span class="q-pill ${r ? c : 'q-z'}" data-tip="${xe(`${tr(`account.mode.${m}`, null, m)}: ${r ?? tr('account.unknown', null, '未知')}/${win.total ?? '?'}`)}">${l}:${r ?? '?'}</span>`;
+    return `<span class="q-pill ${r ? c : 'q-z'}" data-tip="${xe(quotaTip(m, win))}">${l}:${r ?? '?'}</span>`;
   }).join('');
+}
+
+function quotaTip(mode, win) {
+  const parts = [
+    `${tr(`account.mode.${mode}`, null, mode)}: ${win.remaining ?? tr('account.unknown', null, '未知')}/${win.total ?? '?'}`,
+  ];
+  const resetText = fmtQuotaTime(win.reset_at);
+  if (resetText) parts.push(`${tr('account.quotaReset', null, '重置')}: ${resetText}`);
+  const syncedText = fmtQuotaTime(win.synced_at);
+  if (syncedText) parts.push(`${tr('account.quotaSynced', null, '同步')}: ${syncedText}`);
+  parts.push(`${tr('account.quotaSource', null, '来源')}: ${quotaSourceLabel(win.source)}`);
+  return parts.join(' · ');
+}
+
+function quotaSourceLabel(source) {
+  const key = String(source ?? 0);
+  const labels = {
+    0: tr('account.quotaSourceDefault', null, '默认'),
+    1: tr('account.quotaSourceReal', null, '真实'),
+    2: tr('account.quotaSourceEstimated', null, '估算'),
+  };
+  return labels[key] || tr('account.unknown', null, '未知');
 }
 
 // ── Nav & Pagination ────────────────────────────────────────────────────────
@@ -1612,6 +1650,18 @@ function fmtDate(d) {
   return isNaN(dt)
     ? tr('account.na', null, '—')
     : dt.toLocaleDateString(I18n.getLang() === 'en' ? 'en-US' : 'zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function fmtQuotaTime(value) {
+  if (value == null || value === '') return '';
+  const n = Number(value);
+  const dt = new Date(Number.isFinite(n) ? n : value);
+  if (isNaN(dt)) return '';
+  return dt.toLocaleString(I18n.getLang() === 'en' ? 'en-US' : 'zh-CN', {
+    month:'2-digit',
+    day:'2-digit',
+    hour:'2-digit',
+    minute:'2-digit',
+  });
 }
 function statusBadge(s) {
   const m = {

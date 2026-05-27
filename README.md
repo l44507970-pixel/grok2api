@@ -244,6 +244,36 @@ docker compose up -d
 | `grok-4.20-heavy` | `heavy` | `heavy` |
 | `grok-4.3-beta` | `grok-420-computer-use-sa` | `super` |
 
+### Chat（console.x.ai 免费账号）
+
+通过 `console.x.ai` 路由，使用 SSO Token 免费访问，不消耗付费账号额度。
+
+| 模型名 | reasoning effort | 说明 |
+| :-- | :-- | :-- |
+| `grok-4.3-console` | 用户传入（默认 medium） | 免费账号 |
+| `grok-4.3-low` | low（固定） | 免费账号 |
+| `grok-4.3-medium` | medium（固定） | 免费账号 |
+| `grok-4.3-high` | high（固定） | 免费账号 |
+| `grok-4.20-0309-console` | 默认 | 免费账号 |
+| `grok-4.20-0309-reasoning-console` | 固定 reasoning | 免费账号 |
+| `grok-4.20-0309-non-reasoning-console` | 无 reasoning | 免费账号 |
+| `grok-4.20-multi-agent-console` | 用户传入（默认 medium） | 免费账号，多智能体，agent 数量由 effort 决定 |
+| `grok-4.20-multi-agent-low` | low（固定）→ 4 agents | 免费账号，多智能体 |
+| `grok-4.20-multi-agent-medium` | medium（固定）→ 4 agents | 免费账号，多智能体 |
+| `grok-4.20-multi-agent-high` | high（固定）→ 16 agents | 免费账号，多智能体 |
+| `grok-4.20-multi-agent-xhigh` | xhigh（固定）→ 16 agents | 免费账号，多智能体 |
+| `grok-build-console` | 默认 | 免费账号，Grok Build 0.1 |
+
+> multi-agent 模型：`low`/`medium` 使用 4 个 agent（快速研究），`high`/`xhigh` 使用 16 个 agent（深度研究）。
+
+### Console 模型配额
+
+| 配额类型 | 次数 | 窗口 | 说明 |
+| :-- | :-- | :-- | :-- |
+| C（Console） | 30 次 | 15 分钟 | 所有 `*-console` / `*-low` / `*-medium` / `*-high` / `*-xhigh` 模型共享 |
+
+以上为本地估算配额，用于免费账号的选号和后台展示；实际限制可能随 xAI 策略调整而变化。
+
 ### Image
 
 | 模型名 | mode | tier |

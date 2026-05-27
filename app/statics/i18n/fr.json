@@ -167,6 +167,7 @@
     "statFast": "Solde Fast",
     "statExpert": "Solde Expert",
     "statHeavy": "Solde Heavy",
+    "statConsole": "Solde Console",
     "filterStatusLabel": "Statut",
     "filterNsfwLabel": "NSFW",
     "filterTypeLabel": "Type",
@@ -297,8 +298,15 @@
       "fast": "Fast",
       "expert": "Expert",
       "heavy": "Heavy",
-      "grok_4_3": "Grok 4.3 Beta"
+      "grok_4_3": "Grok 4.3 Beta",
+      "console": "Console"
     },
+    "quotaReset": "Réinitialisation",
+    "quotaSynced": "Synchronisé",
+    "quotaSource": "Source",
+    "quotaSourceDefault": "Par défaut",
+    "quotaSourceReal": "Réel",
+    "quotaSourceEstimated": "Estimé",
     "status": {
       "active": "Actif",
       "cooling": "Limité",

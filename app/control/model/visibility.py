@@ -14,6 +14,7 @@ _DEFAULT_SERVERLESS_MODEL_ALLOWLIST = frozenset(
         "grok-4.3-low",
         "grok-4.3-medium",
         "grok-4.3-high",
+        "grok-4.20-0309-reasoning-console",
         "grok-4.20-0309-console",
         "grok-4.20-0309-non-reasoning-console",
         "grok-4.20-multi-agent-console",
@@ -21,6 +22,7 @@ _DEFAULT_SERVERLESS_MODEL_ALLOWLIST = frozenset(
         "grok-4.20-multi-agent-medium",
         "grok-4.20-multi-agent-high",
         "grok-4.20-multi-agent-xhigh",
+        "grok-build-console",
     }
 )
 

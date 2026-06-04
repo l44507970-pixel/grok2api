@@ -18,7 +18,7 @@ from app.control.account.enums import FeedbackKind
 from app.dataplane.reverse.protocol.xai_chat import classify_line, StreamAdapter
 from app.products._account_selection import reserve_account, selection_max_retries
 
-from .chat import _stream_chat, _extract_message, _resolve_image, _quota_sync, _fail_sync, _feedback_kind, _log_task_exception, _upstream_body_excerpt
+from .chat import _stream_chat, _extract_message, _resolve_image, _quota_sync, _fail_sync, _feedback_kind, _upstream_body_excerpt
 from .chat import _configured_retry_codes, _should_retry_upstream
 from ._format import (
     make_resp_id, build_resp_usage, make_resp_object, format_sse,
@@ -610,9 +610,9 @@ async def create(
                 kind = FeedbackKind.SUCCESS if success else _feedback_kind(fail_exc) if fail_exc else FeedbackKind.SERVER_ERROR
                 await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
                 if success:
-                    asyncio.create_task(_quota_sync(token, selected_mode_id)).add_done_callback(_log_task_exception)
+                    await _quota_sync(token, selected_mode_id)
                 else:
-                    asyncio.create_task(_fail_sync(token, selected_mode_id, fail_exc)).add_done_callback(_log_task_exception)
+                    await _fail_sync(token, selected_mode_id, fail_exc)
 
             if success or not _retry:
                 return
@@ -688,9 +688,9 @@ async def create(
             kind = FeedbackKind.SUCCESS if success else _feedback_kind(fail_exc) if fail_exc else FeedbackKind.SERVER_ERROR
             await directory.feedback(token, kind, selected_mode_id)
             if success:
-                asyncio.create_task(_quota_sync(token, selected_mode_id)).add_done_callback(_log_task_exception)
+                await _quota_sync(token, selected_mode_id)
             else:
-                asyncio.create_task(_fail_sync(token, selected_mode_id, fail_exc)).add_done_callback(_log_task_exception)
+                await _fail_sync(token, selected_mode_id, fail_exc)
 
         if success or not _retry:
             break

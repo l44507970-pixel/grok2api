@@ -13,6 +13,7 @@ from app.dataplane.account.selector import current_strategy
 from app.dataplane.reverse.protocol.xai_console_chat import (
     ConsoleStreamAdapter,
     build_console_payload,
+    raise_empty_console_response,
     stream_console_chat,
 )
 from app.platform.config.snapshot import get_config
@@ -33,16 +34,18 @@ def _log_task_exception(task: "asyncio.Task") -> None:
 
 
 async def _quota_sync(token: str, mode_id: int) -> None:
-    """成功调用后扣减本地 console 配额。"""
+    """持久化成功统计，并在配额模式下顺手刷新真实额度。"""
     try:
-        if current_strategy() != "quota":
-            return
         svc = get_refresh_service()
         if svc:
-            await svc.refresh_call_async(token, mode_id)
+            await svc.record_success_async(token, mode_id)
+            if current_strategy() == "quota":
+                asyncio.create_task(
+                    svc.sync_call_quota_async(token, mode_id)
+                ).add_done_callback(_log_task_exception)
     except Exception as exc:
         logger.warning(
-            "console chat quota sync failed: token={}... mode_id={} error={}",
+            "console chat success stats sync failed: token={}... mode_id={} error={}",
             token[:10],
             mode_id,
             exc,
@@ -189,6 +192,9 @@ async def completions(
                                 )
                                 yield f"data: {orjson.dumps(chunk).decode()}\n\n"
 
+                        if not adapter.full_text.strip():
+                            raise_empty_console_response(model)
+
                         final = make_stream_chunk(
                             response_id,
                             model,
@@ -235,13 +241,9 @@ async def completions(
                     )
                     await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
                     if success:
-                        asyncio.create_task(
-                            _quota_sync(token, selected_mode_id)
-                        ).add_done_callback(_log_task_exception)
+                        await _quota_sync(token, selected_mode_id)
                     else:
-                        asyncio.create_task(
-                            _fail_sync(token, selected_mode_id, fail_exc)
-                        ).add_done_callback(_log_task_exception)
+                        await _fail_sync(token, selected_mode_id, fail_exc)
 
                 if success or not retry:
                     return
@@ -285,6 +287,9 @@ async def completions(
                     timeout_s=timeout_s,
                 ):
                     adapter.feed(event_type, data)
+
+                if not adapter.full_text.strip():
+                    raise_empty_console_response(model)
 
                 usage = _build_chat_usage(
                     adapter.usage,
@@ -332,13 +337,9 @@ async def completions(
             )
             await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
             if success:
-                asyncio.create_task(_quota_sync(token, selected_mode_id)).add_done_callback(
-                    _log_task_exception
-                )
+                await _quota_sync(token, selected_mode_id)
             else:
-                asyncio.create_task(
-                    _fail_sync(token, selected_mode_id, fail_exc)
-                ).add_done_callback(_log_task_exception)
+                await _fail_sync(token, selected_mode_id, fail_exc)
 
     raise RateLimitError("No available accounts after retries")
 

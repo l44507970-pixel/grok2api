@@ -56,7 +56,6 @@ from .chat import (
     _configured_retry_codes,
     _fail_sync,
     _feedback_kind,
-    _log_task_exception,
     _quota_sync,
     _should_retry_upstream,
 )
@@ -1059,13 +1058,9 @@ async def _run_lite_request(
             )
             await _acct_dir.feedback(token, kind, int(spec.mode_id))
             if success:
-                asyncio.create_task(
-                    _quota_sync(token, int(spec.mode_id))
-                ).add_done_callback(_log_task_exception)
+                await _quota_sync(token, int(spec.mode_id))
             else:
-                asyncio.create_task(
-                    _fail_sync(token, int(spec.mode_id), fail_exc)
-                ).add_done_callback(_log_task_exception)
+                await _fail_sync(token, int(spec.mode_id), fail_exc)
 
         if retry:
             excluded.append(token)
@@ -1225,9 +1220,9 @@ async def edit(
                 kind = FeedbackKind.SUCCESS if success else _feedback_kind(fail_exc) if fail_exc else FeedbackKind.SERVER_ERROR
                 await _acct_dir.feedback(token, kind, int(spec.mode_id))
                 if success:
-                    asyncio.create_task(_quota_sync(token, int(spec.mode_id)))
+                    await _quota_sync(token, int(spec.mode_id))
                 else:
-                    asyncio.create_task(_fail_sync(token, int(spec.mode_id), fail_exc))
+                    await _fail_sync(token, int(spec.mode_id), fail_exc)
 
         return _sse_stream()
 
@@ -1266,9 +1261,9 @@ async def edit(
         kind = FeedbackKind.SUCCESS if success else _feedback_kind(fail_exc) if fail_exc else FeedbackKind.SERVER_ERROR
         await _acct_dir.feedback(token, kind, int(spec.mode_id))
         if success:
-            asyncio.create_task(_quota_sync(token, int(spec.mode_id)))
+            await _quota_sync(token, int(spec.mode_id))
         else:
-            asyncio.create_task(_fail_sync(token, int(spec.mode_id), fail_exc))
+            await _fail_sync(token, int(spec.mode_id), fail_exc)
 
     if chat_format:
         content = "\n\n".join(image.markdown_value for image in images)

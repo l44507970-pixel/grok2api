@@ -106,16 +106,18 @@ def _transport_upstream_error(exc: BaseException, *, context: str) -> UpstreamEr
 
 
 async def _quota_sync(token: str, mode_id: int) -> None:
-    """Fire-and-forget: fetch real quota after a successful call."""
+    """Persist successful call stats and refresh real quota opportunistically."""
     try:
-        if current_strategy() != "quota":
-            return
         svc = get_refresh_service()
         if svc:
-            await svc.refresh_call_async(token, mode_id)
+            await svc.record_success_async(token, mode_id)
+            if current_strategy() == "quota":
+                asyncio.create_task(
+                    svc.sync_call_quota_async(token, mode_id)
+                ).add_done_callback(_log_task_exception)
     except Exception as exc:
         logger.warning(
-            "chat quota sync failed: token={}... mode_id={} error={}",
+            "chat success stats sync failed: token={}... mode_id={} error={}",
             token[:10],
             mode_id,
             exc,
@@ -139,14 +141,19 @@ async def _fail_sync(
                 current_strategy() == "quota"
                 and getattr(exc, "status", None) == 429
             ):
-                result = await svc.refresh_on_demand()
-                logger.info(
-                    "account on-demand refresh triggered: token={}... mode_id={} refreshed={} failed={} rate_limited={}",
-                    token[:10],
-                    mode_id,
-                    result.refreshed,
-                    result.failed,
-                    result.rate_limited,
+                async def _refresh_on_demand() -> None:
+                    result = await svc.refresh_on_demand()
+                    logger.info(
+                        "account on-demand refresh triggered: token={}... mode_id={} refreshed={} failed={} rate_limited={}",
+                        token[:10],
+                        mode_id,
+                        result.refreshed,
+                        result.failed,
+                        result.rate_limited,
+                    )
+
+                asyncio.create_task(_refresh_on_demand()).add_done_callback(
+                    _log_task_exception
                 )
     except Exception as e:
         logger.warning(
@@ -723,13 +730,9 @@ async def completions(
                         token, kind, selected_mode_id, now_s_val=now_s()
                     )
                     if success:
-                        asyncio.create_task(
-                            _quota_sync(token, selected_mode_id)
-                        ).add_done_callback(_log_task_exception)
+                        await _quota_sync(token, selected_mode_id)
                     else:
-                        asyncio.create_task(
-                            _fail_sync(token, selected_mode_id, fail_exc)
-                        ).add_done_callback(_log_task_exception)
+                        await _fail_sync(token, selected_mode_id, fail_exc)
 
                 if success or not _retry:
                     return
@@ -815,13 +818,9 @@ async def completions(
             )
             await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
             if success:
-                asyncio.create_task(
-                    _quota_sync(token, selected_mode_id)
-                ).add_done_callback(_log_task_exception)
+                await _quota_sync(token, selected_mode_id)
             else:
-                asyncio.create_task(
-                    _fail_sync(token, selected_mode_id, fail_exc)
-                ).add_done_callback(_log_task_exception)
+                await _fail_sync(token, selected_mode_id, fail_exc)
 
         if success or not _retry:
             break

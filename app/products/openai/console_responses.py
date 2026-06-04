@@ -11,6 +11,7 @@ from app.dataplane.account.selector import current_strategy
 from app.dataplane.reverse.protocol.xai_console_chat import (
     ConsoleStreamAdapter,
     build_console_payload,
+    raise_empty_console_response,
     stream_console_chat,
 )
 from app.platform.config.snapshot import get_config
@@ -32,14 +33,16 @@ def _log_task_exception(task: "asyncio.Task") -> None:
 
 async def _quota_sync(token: str, mode_id: int) -> None:
     try:
-        if current_strategy() != "quota":
-            return
         svc = get_refresh_service()
         if svc:
-            await svc.refresh_call_async(token, mode_id)
+            await svc.record_success_async(token, mode_id)
+            if current_strategy() == "quota":
+                asyncio.create_task(
+                    svc.sync_call_quota_async(token, mode_id)
+                ).add_done_callback(_log_task_exception)
     except Exception as exc:
         logger.warning(
-            "console responses quota sync failed: token={}... mode_id={} error={}",
+            "console responses success stats sync failed: token={}... mode_id={} error={}",
             token[:10],
             mode_id,
             exc,
@@ -164,7 +167,6 @@ async def create(
                 retry = False
                 fail_exc: BaseException | None = None
                 adapter = ConsoleStreamAdapter()
-                text_buf: list[str] = []
 
                 try:
                     payload = build_console_payload(
@@ -234,7 +236,6 @@ async def create(
                             timeout_s=timeout_s,
                         ):
                             for token_text in adapter.feed(event_type, data):
-                                text_buf.append(token_text)
                                 yield format_sse(
                                     "response.output_text.delta",
                                     {
@@ -246,7 +247,9 @@ async def create(
                                     },
                                 )
 
-                        full_text = "".join(text_buf)
+                        full_text = adapter.full_text
+                        if not full_text.strip():
+                            raise_empty_console_response(model)
                         msg_item = _message_item(message_id, full_text)
                         yield format_sse(
                             "response.output_text.done",
@@ -328,13 +331,9 @@ async def create(
                     )
                     await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
                     if success:
-                        asyncio.create_task(
-                            _quota_sync(token, selected_mode_id)
-                        ).add_done_callback(_log_task_exception)
+                        await _quota_sync(token, selected_mode_id)
                     else:
-                        asyncio.create_task(
-                            _fail_sync(token, selected_mode_id, fail_exc)
-                        ).add_done_callback(_log_task_exception)
+                        await _fail_sync(token, selected_mode_id, fail_exc)
 
                 if success or not retry:
                     return
@@ -379,6 +378,9 @@ async def create(
                     timeout_s=timeout_s,
                 ):
                     adapter.feed(event_type, data)
+
+                if not adapter.full_text.strip():
+                    raise_empty_console_response(model)
 
                 msg_item = _message_item(message_id, adapter.full_text)
                 result = make_resp_object(
@@ -427,13 +429,9 @@ async def create(
             )
             await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
             if success:
-                asyncio.create_task(_quota_sync(token, selected_mode_id)).add_done_callback(
-                    _log_task_exception
-                )
+                await _quota_sync(token, selected_mode_id)
             else:
-                asyncio.create_task(
-                    _fail_sync(token, selected_mode_id, fail_exc)
-                ).add_done_callback(_log_task_exception)
+                await _fail_sync(token, selected_mode_id, fail_exc)
 
     raise RateLimitError("No available accounts after retries")
 

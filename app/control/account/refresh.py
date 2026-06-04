@@ -56,6 +56,22 @@ _MODE_KEYS = {
 }
 
 
+def _failure_reason(exc: BaseException | None) -> str:
+    if exc is None:
+        return "unknown"
+    status = getattr(exc, "status", None)
+    message = getattr(exc, "message", None) or str(exc) or exc.__class__.__name__
+    details = getattr(exc, "details", None)
+    body = details.get("body") if isinstance(details, dict) else ""
+    parts: list[str] = []
+    if status is not None:
+        parts.append(f"status={status}")
+    parts.append(str(message))
+    if body:
+        parts.append(f"body={body}")
+    return " ".join(" ".join(parts).split())[:240]
+
+
 class AccountRefreshService:
     """Fetches real quota data from the upstream usage API and persists it.
 
@@ -150,25 +166,42 @@ class AccountRefreshService:
             agg.merge(r)
         return agg
 
-    async def refresh_call_async(self, token: str, mode_id: int) -> None:
-        """Fire-and-forget single-mode quota sync after a successful call."""
+    async def record_success_async(self, token: str, mode_id: int) -> None:
+        """Persist successful request stats without depending on quota refresh."""
         record = (await self._repo.get_accounts([token]) or [None])[0]
         if record is None or record.is_deleted():
             return
+        await self._apply_single_mode(
+            record, mode_id, window=None, is_use=True, use_at_ms=now_ms()
+        )
+
+    async def sync_call_quota_async(self, token: str, mode_id: int) -> None:
+        """Refresh a called mode's real quota without touching usage counters."""
         if mode_id == 5:
-            await self._apply_single_mode(
-                record, mode_id, window=None, is_use=True, use_at_ms=now_ms()
-            )
+            return
+        record = (await self._repo.get_accounts([token]) or [None])[0]
+        if record is None or record.is_deleted():
             return
         try:
             window = await self._fetch_mode_quota(token, record.pool, mode_id)
         except UpstreamError as exc:
             if await self._expire_invalid_credentials(record, exc):
                 return
-            raise
+            logger.warning(
+                "account post-call quota sync failed: token={}... mode_id={} error={}",
+                token[:10],
+                mode_id,
+                exc,
+            )
+            return
         await self._apply_single_mode(
-            record, mode_id, window, is_use=True, use_at_ms=now_ms()
+            record, mode_id, window, is_use=False, use_at_ms=None
         )
+
+    async def refresh_call_async(self, token: str, mode_id: int) -> None:
+        """Record a successful call, then refresh quota for legacy callers."""
+        await self.record_success_async(token, mode_id)
+        await self.sync_call_quota_async(token, mode_id)
 
     async def refresh_scheduled(self, pool: str | None = None) -> RefreshResult:
         """Periodic refresh — fetch real quotas for all (or one pool's) accounts.
@@ -381,6 +414,7 @@ class AccountRefreshService:
         from .commands import AccountPatch
 
         try:
+            reason = _failure_reason(exc)
             if exc is not None:
                 record = next(iter(await self._repo.get_accounts([token])), None)
                 if record is not None and await self._expire_invalid_credentials(
@@ -429,6 +463,7 @@ class AccountRefreshService:
                         token=token,
                         usage_fail_delta=1,
                         last_fail_at=now_ms(),
+                        last_fail_reason=reason,
                     )
                 ]
             )

@@ -1479,6 +1479,7 @@ function rowHtml(t) {
   const isRefreshing = refreshingTokens.has(t.token);
   const success = t.use_count || 0;
   const fail = t.fail_count || 0;
+  const failTipText = fail ? failTip(t) : '';
   const nsfwBtn = isNsfw
     ? `<button type="button" class="row-nsfw-btn is-on" data-nsfw-token="${xe(t.token)}" data-nsfw-enabled="false" data-tip="${xe(tr('account.batchNsfwDisable', null, '关闭 NSFW'))}" aria-label="${xe(tr('account.batchNsfwDisable', null, '关闭 NSFW'))}">
         <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -1505,7 +1506,7 @@ function rowHtml(t) {
     <td class="table-center">${statusBadge(t.status)}</td>
     <td data-quota-only><div class="quota-cell">${qpills(q)}</div></td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#8f8f8f">${success}</td>
-    <td class="table-center" style="font-variant-numeric:tabular-nums;color:#9a9a9a">${fail}</td>
+    <td class="table-center" style="font-variant-numeric:tabular-nums;color:#9a9a9a" ${failTipText ? `data-tip="${xe(failTipText)}"` : ''}>${fail}</td>
     <td class="table-center" style="font-variant-numeric:tabular-nums;color:#9a9a9a">${fmtRate(success, fail)}</td>
     <td style="font-size:12px;color:#9a9a9a">${fmtDate(t.last_used_at)}</td>
     <td><div class="row-actions">
@@ -1650,6 +1651,13 @@ function fmtDate(d) {
   return isNaN(dt)
     ? tr('account.na', null, '—')
     : dt.toLocaleDateString(I18n.getLang() === 'en' ? 'en-US' : 'zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function failTip(t) {
+  const parts = [`${tr('account.colFail', null, '失败')}: ${t.fail_count || 0}`];
+  if (t.last_fail_reason) parts.push(`${tr('account.lastFailReason', null, '最近原因')}: ${t.last_fail_reason}`);
+  const lastFailAt = fmtDate(t.last_fail_at);
+  if (lastFailAt !== tr('account.na', null, '—')) parts.push(`${tr('account.lastFailAt', null, '最近时间')}: ${lastFailAt}`);
+  return parts.join(' · ');
 }
 function fmtQuotaTime(value) {
   if (value == null || value === '') return '';

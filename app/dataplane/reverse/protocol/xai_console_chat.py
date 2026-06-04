@@ -349,6 +349,51 @@ class ConsoleStreamAdapter:
         self.usage: dict[str, Any] | None = None
         self._done = False
 
+    def _apply_final_text(self, text: Any) -> list[str]:
+        if not isinstance(text, str) or not text:
+            return []
+        current = self.full_text
+        if not current:
+            self.text_buf = [text]
+            return [text]
+        if len(text) > len(current):
+            emitted = [text[len(current):]] if text.startswith(current) else []
+            self.text_buf = [text]
+            return [part for part in emitted if part]
+        return []
+
+    @staticmethod
+    def _content_text(content: Any) -> str:
+        if not isinstance(content, list):
+            return ""
+        parts: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_type = str(block.get("type") or "")
+            if block_type not in {"output_text", "text"}:
+                continue
+            text = block.get("text")
+            if isinstance(text, str) and text:
+                parts.append(text)
+        return "".join(parts)
+
+    @classmethod
+    def _output_text(cls, output: Any) -> str:
+        if not isinstance(output, list):
+            return ""
+        parts: list[str] = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            direct = item.get("output_text")
+            if isinstance(direct, str) and direct:
+                parts.append(direct)
+            content_text = cls._content_text(item.get("content"))
+            if content_text:
+                parts.append(content_text)
+        return "".join(parts)
+
     def feed(self, event_type: str, data: str) -> list[str]:
         if self._done:
             return []
@@ -357,15 +402,31 @@ class ConsoleStreamAdapter:
         except (orjson.JSONDecodeError, ValueError):
             return []
 
+        if not event_type:
+            event_type = str(obj.get("type") or "")
+
         if event_type == "response.output_text.delta":
             delta = obj.get("delta") or ""
             if delta:
                 self.text_buf.append(delta)
                 return [str(delta)]
+        elif event_type == "response.output_text.done":
+            return self._apply_final_text(obj.get("text"))
+        elif event_type == "response.content_part.done":
+            part = obj.get("part") if isinstance(obj.get("part"), dict) else {}
+            return self._apply_final_text(part.get("text"))
+        elif event_type == "response.output_item.done":
+            item = obj.get("item") if isinstance(obj.get("item"), dict) else {}
+            return self._apply_final_text(self._content_text(item.get("content")))
         elif event_type == "response.completed":
+            emitted: list[str] = []
             response = obj.get("response") or {}
-            self.usage = response.get("usage")
+            if isinstance(response, dict):
+                self.usage = response.get("usage")
+                emitted.extend(self._apply_final_text(response.get("output_text")))
+                emitted.extend(self._apply_final_text(self._output_text(response.get("output"))))
             self._done = True
+            return emitted
         elif event_type == "error":
             msg = obj.get("message") or obj.get("error") or str(obj)
             raise UpstreamError(f"Console API error: {msg}", status=502)
@@ -375,6 +436,14 @@ class ConsoleStreamAdapter:
     @property
     def full_text(self) -> str:
         return "".join(self.text_buf)
+
+
+def raise_empty_console_response(model: str) -> None:
+    raise UpstreamError(
+        "Console API completed without output text",
+        status=503,
+        body=f"reason=empty_output model={model}",
+    )
 
 
 def classify_console_line(line: str) -> tuple[str, str]:
@@ -481,6 +550,7 @@ __all__ = [
     "CONSOLE_MODELS",
     "build_console_payload",
     "ConsoleStreamAdapter",
+    "raise_empty_console_response",
     "classify_console_line",
     "stream_console_chat",
 ]

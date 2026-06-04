@@ -30,7 +30,7 @@ from app.dataplane.reverse.protocol.tool_parser import parse_tool_calls
 
 from app.products.openai.chat import (
     _stream_chat, _extract_message, _resolve_image,
-    _quota_sync, _fail_sync, _feedback_kind, _log_task_exception,
+    _quota_sync, _fail_sync, _feedback_kind,
     _configured_retry_codes, _should_retry_upstream,
 )
 from app.products._account_selection import reserve_account, selection_max_retries
@@ -623,9 +623,9 @@ async def create(
                 )
                 await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
                 if success:
-                    asyncio.create_task(_quota_sync(token, selected_mode_id)).add_done_callback(_log_task_exception)
+                    await _quota_sync(token, selected_mode_id)
                 else:
-                    asyncio.create_task(_fail_sync(token, selected_mode_id, fail_exc)).add_done_callback(_log_task_exception)
+                    await _fail_sync(token, selected_mode_id, fail_exc)
 
             if success or not _retry:
                 return
@@ -700,9 +700,9 @@ async def create(
             )
             await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
             if success:
-                asyncio.create_task(_quota_sync(token, selected_mode_id)).add_done_callback(_log_task_exception)
+                await _quota_sync(token, selected_mode_id)
             else:
-                asyncio.create_task(_fail_sync(token, selected_mode_id, fail_exc)).add_done_callback(_log_task_exception)
+                await _fail_sync(token, selected_mode_id, fail_exc)
 
         if success or not _retry:
             break

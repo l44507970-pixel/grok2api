@@ -788,9 +788,9 @@ async def _run_video_with_account(
         )
         await _acct_dir.feedback(token, kind, int(spec.mode_id))
         if success:
-            asyncio.create_task(_quota_sync(token, int(spec.mode_id)))
+            await _quota_sync(token, int(spec.mode_id))
         else:
-            asyncio.create_task(_fail_sync(token, int(spec.mode_id), fail_exc))
+            await _fail_sync(token, int(spec.mode_id), fail_exc)
 
 
 async def _put_video_job(job: _VideoJob) -> None:
@@ -893,9 +893,9 @@ async def _run_video_job(
             )
             await _acct_dir.feedback(token, kind, int(spec.mode_id))
             if success:
-                asyncio.create_task(_quota_sync(token, int(spec.mode_id)))
+                await _quota_sync(token, int(spec.mode_id))
             else:
-                asyncio.create_task(_fail_sync(token, int(spec.mode_id), fail_exc))
+                await _fail_sync(token, int(spec.mode_id), fail_exc)
 
         path = _save_video_bytes(raw, job.id)
         async with _VIDEO_JOBS_LOCK:

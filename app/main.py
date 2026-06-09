@@ -260,6 +260,26 @@ async def lifespan(app: FastAPI):
     if is_leader and proxy_scheduler is not None:
         proxy_scheduler.start()
 
+    # 6. Console 配额是本地估算；即使关闭上游配额刷新，也需要轻量恢复循环。
+    console_reset_task: asyncio.Task | None = None
+    _CONSOLE_RESET_INTERVAL = int(os.getenv("CONSOLE_QUOTA_RESET_INTERVAL", "30"))
+
+    async def _console_reset_loop() -> None:
+        while True:
+            await asyncio.sleep(max(1, _CONSOLE_RESET_INTERVAL))
+            try:
+                if refresh_svc is not None:
+                    await refresh_svc.reset_expired_console_windows()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("console quota reset loop error: error={}", exc)
+
+    if is_leader and not serverless and refresh_svc is not None:
+        console_reset_task = asyncio.create_task(
+            _console_reset_loop(), name="console-quota-reset"
+        )
+
     logger.info("application startup completed")
     yield
 
@@ -267,6 +287,13 @@ async def lifespan(app: FastAPI):
     # Shutdown
     # -----------
     logger.info("application shutdown started")
+    if console_reset_task is not None:
+        console_reset_task.cancel()
+        try:
+            await console_reset_task
+        except asyncio.CancelledError:
+            pass
+
     if sync_task is not None:
         sync_task.cancel()
         try:

@@ -1,14 +1,14 @@
-"""Default quota windows and pool inference logic.
+"""默认配额窗口与账号池推断逻辑。
 
-Canonical quota totals per pool type (from upstream rate-limits API):
+各账号池的标准配额总量（来源于上游 rate-limits API 与本地 Console 估算）：
 
               auto    fast    expert    heavy    grok_4_3    console
-  basic         20      30      20        20        20          30       window: 86400 s / console: 900 s
-  super         50     140      50        —         50          30       window: 7200 s / console: 900 s
-  heavy        150     400     150        20        150         30       window: 7200 s / console: 900 s
+  basic          —      30       —         —         —          30       window: 86400 s / console: 900 s
+  super         50     140      50         —        50          30       window: 7200 s / console: 900 s
+  heavy        150     400     150        20       150          30       window: 7200 s / console: 900 s
 
-Pool inference uses ``auto.total`` as the primary signal — value 20 maps to
-basic, 50 to super, 150 to heavy.
+付费池优先通过 ``auto.total`` 推断。Basic 普号只保留 fast 与 console
+本地配额窗口。
 """
 
 from typing import TYPE_CHECKING
@@ -42,17 +42,13 @@ def _w(remaining: int, total: int, window_seconds: int) -> QuotaWindow:
 
 BASIC_FAST_LIMIT = 30
 BASIC_FAST_WINDOW_SECONDS = 86_400
-BASIC_OTHER_LIMIT = 20
-BASIC_OTHER_WINDOW_SECONDS = 86_400
 CONSOLE_LIMIT = 30
 CONSOLE_WINDOW_SECONDS = 900
 
 BASIC_QUOTA_DEFAULTS = AccountQuotaSet(
-    auto=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
+    auto=_w(0, 0, 0),  # Basic 普号不支持
     fast=_w(BASIC_FAST_LIMIT, BASIC_FAST_LIMIT, BASIC_FAST_WINDOW_SECONDS),
-    expert=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
-    heavy=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
-    grok_4_3=_w(BASIC_OTHER_LIMIT, BASIC_OTHER_LIMIT, BASIC_OTHER_WINDOW_SECONDS),
+    expert=_w(0, 0, 0),  # Basic 普号不支持
     console=_w(CONSOLE_LIMIT, CONSOLE_LIMIT, CONSOLE_WINDOW_SECONDS),
 )
 
@@ -81,7 +77,7 @@ _POOL_DEFAULTS: dict[str, AccountQuotaSet] = {
 }
 
 _SUPPORTED_MODE_IDS_BY_POOL: dict[str, frozenset[int]] = {
-    "basic": frozenset((0, 1, 2, 3, 4, 5)),
+    "basic": frozenset((1, 5)),
     "super": frozenset((0, 1, 2, 4, 5)),
     "heavy": frozenset((0, 1, 2, 3, 4, 5)),
 }

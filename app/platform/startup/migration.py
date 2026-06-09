@@ -273,6 +273,13 @@ async def _normalize_basic_fast_only_quota(repo: "AccountRepository") -> None:
                     quota_auto=normalized.auto.to_dict(),
                     quota_fast=normalized.fast.to_dict(),
                     quota_expert=normalized.expert.to_dict(),
+                    quota_heavy={},
+                    quota_grok_4_3={},
+                    quota_console=(
+                        normalized.console.to_dict()
+                        if normalized.console is not None
+                        else None
+                    ),
                 )
             )
         if page >= result.total_pages:
@@ -287,7 +294,7 @@ async def _normalize_basic_fast_only_quota(repo: "AccountRepository") -> None:
         batch = patches[i : i + _BATCH]
         res = await repo.patch_accounts(batch)
         total += res.patched
-    logger.info("account: normalized {} basic accounts to fast-only quota", total)
+    logger.info("account: normalized {} basic accounts to fast/console-only quota", total)
 
 
 # ---------------------------------------------------------------------------

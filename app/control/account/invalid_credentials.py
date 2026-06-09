@@ -19,6 +19,7 @@ async def mark_account_invalid_credentials(
     exc: BaseException,
     *,
     source: str,
+    count_failure: bool = False,
 ) -> bool:
     """Mark *token* as invalid when *exc* matches Grok invalid credentials."""
     from app.dataplane.reverse.protocol.xai_usage import is_invalid_credentials_error
@@ -38,6 +39,7 @@ async def mark_account_invalid_credentials(
                 status=AccountStatus.EXPIRED,
                 last_fail_at=ts,
                 last_fail_reason=reason,
+                usage_fail_delta=1 if count_failure else None,
                 state_reason=reason,
                 ext_merge={
                     **ext,

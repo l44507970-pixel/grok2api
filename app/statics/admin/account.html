@@ -1534,7 +1534,7 @@ function qpills(q) {
     ['auto',     'A', 'q-a', true],
     ['fast',     'F', 'q-f', true],
     ['expert',   'E', 'q-e', true],
-    ['heavy',    'H', 'q-h', true],
+    ['heavy',    'H', 'q-h', false],
     ['grok_4_3', 'B', 'q-b', false],
     ['console',  'C', 'q-c', true],
   ];
@@ -1544,6 +1544,7 @@ function qpills(q) {
       if (!showEmpty) return '';
       return `<span class="q-pill q-z" data-tip="${xe(tr(`account.mode.${m}`, null, m))}: 0">${l}:0</span>`;
     }
+    if ((win.total ?? 0) <= 0) return '';
     const r = win.remaining ?? null;
     return `<span class="q-pill ${r ? c : 'q-z'}" data-tip="${xe(quotaTip(m, win))}">${l}:${r ?? '?'}</span>`;
   }).join('');

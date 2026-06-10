@@ -1954,7 +1954,12 @@ async function refreshOne(token) {
   try {
     showToast(tr('account.refreshing', { n: 1 }, '正在刷新 1 个账户…'), 'info');
     const d = await _api('POST', '/batch/refresh', { tokens:[token] });
-    showToast(tr('account.refreshDone', { ok: d.summary?.ok ?? 0, fail: d.summary?.fail ?? 0 }, `刷新完成：成功 ${d.summary?.ok??0}，失败 ${d.summary?.fail??0}`), 'success');
+    const ok = d.summary?.ok ?? 0;
+    const fail = d.summary?.fail ?? 0;
+    showToast(
+      tr('account.refreshDone', { ok, fail }, `刷新完成：成功 ${ok}，失败 ${fail}`),
+      fail > 0 ? 'error' : 'success',
+    );
     await load();
   } catch (e) { showToast(`${tr('account.refreshFailed', null, '刷新失败')}: ${e.message}`, 'error'); }
   finally {
@@ -2040,7 +2045,10 @@ async function batchRefreshSel() {
   if (!sel.size) return;
   await _runBatch('/batch/refresh', [...sel],
     tr('account.refreshing', { n: sel.size }, `正在刷新 ${sel.size} 个账户…`),
-    (ok, fail) => showToast(tr('account.refreshDone', { ok, fail }, `刷新完成：成功 ${ok}，失败 ${fail}`), 'success')
+    (ok, fail) => showToast(
+      tr('account.refreshDone', { ok, fail }, `刷新完成：成功 ${ok}，失败 ${fail}`),
+      fail > 0 ? 'error' : 'success',
+    )
   );
 }
 

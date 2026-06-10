@@ -246,9 +246,11 @@ async def batch_refresh(
 
     async def _refresh_one(token: str) -> dict:
         result = await refresh_svc.refresh_tokens([token])
+        if result.expired:
+            raise UpstreamError("账号已失效或登录凭证过期")
         if not result.refreshed:
-            raise UpstreamError("未获取到真实配额数据")
-        return {"refreshed": result.refreshed}
+            raise UpstreamError("未通过账号校验：未获取到真实配额或会话不可用")
+        return {"refreshed": result.refreshed, "expired": result.expired}
 
     c = _concurrency(concurrency, "batch.refresh_concurrency")
     return await _dispatch(tokens, _refresh_one, use_async=async_mode, concurrency=c)

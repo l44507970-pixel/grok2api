@@ -167,6 +167,12 @@ class AccountRefreshService:
             )
             return None
 
+    async def _verify_session(self, record: AccountRecord) -> None:
+        """手动刷新使用的只读会话校验。"""
+        from app.dataplane.reverse.protocol.xai_usage import verify_session
+
+        await verify_session(record.token)
+
     # ------------------------------------------------------------------
     # Core refresh logic
     # ------------------------------------------------------------------
@@ -273,9 +279,14 @@ class AccountRefreshService:
         """Explicit refresh for a list of tokens (admin / manual trigger)."""
         records = [r for r in await self._repo.get_accounts(tokens) if is_manageable(r)]
         concurrency = get_config("account.refresh.usage_concurrency", 50)
+        verify_session = get_config().get_bool(
+            "account.refresh.manual_verify_session", True
+        )
         results = await run_batch(
             records,
-            lambda r: self._refresh_one(r, bootstrap=True),
+            lambda r: self._refresh_one(
+                r, bootstrap=True, verify_session=verify_session
+            ),
             concurrency=concurrency,
         )
         agg = RefreshResult()
@@ -293,6 +304,7 @@ class AccountRefreshService:
         *,
         apply_fallback: bool = False,
         bootstrap: bool = False,
+        verify_session: bool = False,
     ) -> RefreshResult:
         """Fetch all pool-supported modes from the usage API and persist them.
 
@@ -366,6 +378,20 @@ class AccountRefreshService:
 
         if not patches:
             return RefreshResult(checked=1, failed=0 if refreshed else 1)
+
+        if verify_session and refreshed:
+            try:
+                await self._verify_session(record)
+            except UpstreamError as exc:
+                if await self._expire_invalid_credentials(record, exc):
+                    return RefreshResult(checked=1, expired=1, failed=1)
+                logger.warning(
+                    "account session verification failed: token={}... status={} error={}",
+                    record.token[:10],
+                    exc.status,
+                    exc,
+                )
+                return RefreshResult(checked=1, failed=1)
 
         # Infer pool type from live quota data and patch if it changed.
         pool_patch = inferred if inferred is not None and inferred != record.pool else None

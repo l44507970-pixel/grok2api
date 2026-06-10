@@ -198,6 +198,52 @@ async def fetch_mode_quota(token: str, mode_id: int) -> object | None:
     return await _fetch_one(token, mode_id)
 
 
+async def verify_session(token: str) -> None:
+    """执行轻量只读会话校验。
+
+    rate-limits 只能证明额度接口可读，不能完整证明账号可用于业务请求。
+    管理端手动刷新会调用该探测，避免仅因某个额度窗口可解析就判定账号健康。
+    """
+    from app.control.proxy.models import ProxyFeedback, ProxyFeedbackKind
+    from app.dataplane.proxy import get_proxy_runtime
+    from app.dataplane.reverse.runtime.endpoint_table import ASSETS_LIST
+    from app.dataplane.reverse.transport._proxy_feedback import upstream_feedback
+    from app.dataplane.reverse.transport.http import get_json
+
+    proxy = await get_proxy_runtime()
+    lease = await proxy.acquire()
+    try:
+        await asyncio.wait_for(
+            get_json(
+                ASSETS_LIST,
+                token,
+                params={"limit": 1},
+                lease=lease,
+                timeout_s=15.0,
+                origin="https://grok.com",
+                referer="https://grok.com/files",
+            ),
+            timeout=20.0,
+        )
+    except UpstreamError as exc:
+        await proxy.feedback(lease, upstream_feedback(exc))
+        raise
+    except asyncio.TimeoutError as exc:
+        await proxy.feedback(
+            lease, ProxyFeedback(kind=ProxyFeedbackKind.TRANSPORT_ERROR)
+        )
+        raise UpstreamError("session verification timed out", status=504) from exc
+    except Exception as exc:
+        await proxy.feedback(
+            lease, ProxyFeedback(kind=ProxyFeedbackKind.TRANSPORT_ERROR)
+        )
+        raise UpstreamError(f"session verification failed: {exc}", status=502) from exc
+
+    await proxy.feedback(
+        lease, ProxyFeedback(kind=ProxyFeedbackKind.SUCCESS, status_code=200)
+    )
+
+
 def is_invalid_credentials_body(body: str) -> bool:
     """Return whether *body* contains a Grok invalid/blocked account marker."""
     text = str(body or "").lower()
@@ -220,6 +266,8 @@ def is_invalid_credentials_error(exc: BaseException) -> bool:
         return False
     if exc.status not in (400, 401, 403):
         return False
+    if exc.status == 401:
+        return True
     return is_invalid_credentials_body(str(exc.details.get("body", "") or ""))
 
 
@@ -250,6 +298,7 @@ __all__ = [
     "parse_rate_limits",
     "fetch_all_quotas",
     "fetch_mode_quota",
+    "verify_session",
     "is_invalid_credentials_body",
     "is_invalid_credentials_error",
 ]

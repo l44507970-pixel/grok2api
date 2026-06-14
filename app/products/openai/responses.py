@@ -21,7 +21,7 @@ from app.products._account_selection import reserve_account, selection_max_retri
 from .chat import _stream_chat, _extract_message, _resolve_image, _quota_sync, _fail_sync, _feedback_kind, _upstream_body_excerpt
 from .chat import _configured_retry_codes, _should_retry_upstream
 from ._format import (
-    make_resp_id, build_resp_usage, make_resp_object, format_sse,
+    make_resp_id, build_resp_usage, make_resp_object, format_sse, SSE_HEARTBEAT,
 )
 from app.dataplane.reverse.protocol.tool_prompt import (
     build_tool_system_prompt, extract_tool_names, inject_into_message,
@@ -312,6 +312,9 @@ async def create(
                     })
 
                     ended = False
+                    # See chat.py: leading SSE comment heartbeat keeps the
+                    # connection alive during the upstream "thinking" phase.
+                    yield SSE_HEARTBEAT
                     async for line in _stream_chat(
                         token     = token,
                         mode_id   = ModeId(selected_mode_id),

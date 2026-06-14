@@ -22,7 +22,7 @@ from app.platform.tokens import estimate_prompt_tokens, estimate_tokens
 from app.products._account_selection import reserve_account, selection_max_retries
 from app.products.openai.chat import _configured_retry_codes, _should_retry_upstream
 
-from ._format import build_resp_usage, format_sse, make_resp_object
+from ._format import build_resp_usage, format_sse, make_resp_object, SSE_HEARTBEAT
 
 
 def _log_task_exception(task: "asyncio.Task") -> None:
@@ -230,6 +230,9 @@ async def create(
                             },
                         )
 
+                        # See chat.py: leading SSE comment heartbeat keeps the
+                        # connection alive during the upstream "thinking" phase.
+                        yield SSE_HEARTBEAT
                         async for event_type, data in stream_console_chat(
                             token,
                             payload,

@@ -177,6 +177,15 @@ def format_sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {orjson.dumps(data).decode()}\n\n"
 
 
+# SSE comment line used as a heartbeat. Per the SSE spec, any line starting
+# with a colon is a comment and MUST be ignored by clients (OpenAI SDK and all
+# compliant EventSource implementations do so). Yielded once before entering the
+# upstream streaming loop so that long upstream "thinking" phases do not look
+# like an idle connection to reverse proxies / load balancers / clients, which
+# otherwise drop the stream well before the first token arrives.
+SSE_HEARTBEAT = ": heartbeat\n\n"
+
+
 # ---------------------------------------------------------------------------
 # Tool call format (Chat Completions)
 # ---------------------------------------------------------------------------
@@ -299,4 +308,6 @@ __all__ = [
     "make_tool_call_chunk", "make_tool_call_done_chunk", "make_tool_call_response",
     # responses api
     "make_resp_id", "build_resp_usage", "make_resp_object", "format_sse",
+    # streaming
+    "SSE_HEARTBEAT",
 ]

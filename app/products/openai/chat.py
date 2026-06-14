@@ -54,6 +54,7 @@ from ._format import (
     make_tool_call_done_chunk,
     make_tool_call_response,
     build_usage,
+    SSE_HEARTBEAT,
 )
 from ._tool_sieve import ToolSieve
 from app.products._account_selection import reserve_account, selection_max_retries
@@ -550,6 +551,12 @@ async def completions(
                         ended = False
                         sieve = ToolSieve(tool_names)
                         tool_calls_emitted = False
+                        # Heartbeat before the upstream loop: reasoning models can
+                        # spend a long time "thinking" before the first token, and
+                        # an idle connection looks like a timeout to reverse
+                        # proxies / clients. A leading SSE comment is ignored by
+                        # all compliant clients and keeps the connection alive.
+                        yield SSE_HEARTBEAT
                         async for line in _stream_chat(
                             token=token,
                             mode_id=ModeId(selected_mode_id),

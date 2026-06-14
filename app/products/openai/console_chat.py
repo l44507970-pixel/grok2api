@@ -24,7 +24,7 @@ from app.platform.tokens import estimate_prompt_tokens, estimate_tokens
 from app.products._account_selection import reserve_account, selection_max_retries
 from app.products.openai.chat import _configured_retry_codes, _should_retry_upstream
 
-from ._format import build_usage, make_chat_response, make_response_id, make_stream_chunk
+from ._format import build_usage, make_chat_response, make_response_id, make_stream_chunk, SSE_HEARTBEAT
 
 
 def _log_task_exception(task: "asyncio.Task") -> None:
@@ -179,6 +179,9 @@ async def completions(
                     )
 
                     try:
+                        # See chat.py: leading SSE comment heartbeat keeps the
+                        # connection alive during the upstream "thinking" phase.
+                        yield SSE_HEARTBEAT
                         async for event_type, data in stream_console_chat(
                             token,
                             payload,
